@@ -4,197 +4,269 @@
 
 body {
     font-family: 'Inter', sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    min-height: 100vh;
-    background-color: #f0f4f8; /* bg-slate-100 equivalent */
     margin: 0;
-    padding-top: 20px;
-    overflow-x: hidden;
+    overflow: hidden; /* Prevent scrollbars with fullscreen canvas */
+    background-color: #333; /* Fallback background if canvas doesn't load */
 }
-#gameContainer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background-color: white;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* shadow-xl rough equivalent */
-    max-width: 95vw;
-    margin-top: 120px;
-}
+
 #gameCanvas {
-    background-color: #72a372;
-    border-radius: 8px;
-    max-width: 100%;
+    display: block; /* Remove extra space below canvas */
+    width: 100vw;
+    height: 100vh;
+    background-color: #72a372; /* Default grass color as base */
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
 }
 .pan-mode-active { cursor: grab; }
 .pan-mode-dragging { cursor: grabbing; }
 .select-mode-active { cursor: crosshair; }
 
+#gameTitle {
+    position: fixed;
+    top: 15px; /* Adjusted to not overlap mainInfoPanel much */
+    left: 20px;
+    z-index: 1020;
+    color: white;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+    font-size: 1.5rem; /* text-2xl */
+}
+
 #mainInfoPanel {
     position: fixed;
     top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 10px 15px;
-    background-color: rgba(233, 238, 242, 0.95);
+    right: 10px; /* Moved to top-right */
+    left: auto;  /* Override centered positioning */
+    transform: none; /* Override centered positioning */
+    padding: 8px 12px;
+    background-color: rgba(30, 41, 59, 0.85); /* bg-slate-800 with transparency */
     backdrop-filter: blur(5px);
-    border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    text-align: center;
-    width: auto;
-    min-width: 320px;
-    max-width: 95vw;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.25);
+    width: auto; /* Fit content */
+    max-width: calc(100vw - 180px); /* Max width considering title on left */
     z-index: 1010;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-    gap: 6px;
-    font-size: 0.8em;
+    grid-template-columns: repeat(auto-fit, minmax(90px, auto));
+    gap: 5px;
+    font-size: 0.75em; /* Slightly smaller base font */
 }
 #mainInfoPanel div {
-    padding: 4px;
-    background-color: rgba(255,255,255,0.5);
-    border-radius: 4px;
+    padding: 5px;
+    background-color: rgba(51, 65, 85, 0.7); /* bg-slate-700 with transparency */
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    min-width: 80px; /* Ensure items don't get too squished */
 }
 #mainInfoPanel .info-label {
-    font-size: 0.85em;
-    color: #555;
-    margin-bottom: 1px;
+    font-size: 0.9em; /* Relative to panel's font-size */
+    color: #cbd5e1; /* slate-300 */
+    margin-bottom: 2px;
 }
 #mainInfoPanel .info-value {
     font-weight: 600;
-    font-size: 0.95em;
+    font-size: 1em; /* Relative to panel's font-size */
+    color: #f8fafc; /* slate-50 */
 }
-.positive-net { color: #27ae60; }
-.negative-net { color: #c0392b; }
+.positive-net { color: #4ade80; } /* green-400 */
+.negative-net { color: #f87171; } /* red-400 */
+#budgetDisplay.text-red-500 { color: #f87171 !important; } /* Ensure override */
+#budgetDisplay.text-green-600 { color: #4ade80 !important; } /* Ensure override */
 
 
 .build-toolbar {
-    margin-top: 20px;
-    margin-bottom: 20px;
+    position: fixed;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
     padding: 10px;
-    background-color: #e2e8f0; /* bg-slate-200 */
-    border-radius: 8px;
+    background-color: rgba(30, 41, 59, 0.85); /* bg-slate-800 with transparency */
+    backdrop-filter: blur(5px);
+    border-radius: 10px;
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
     justify-content: center;
+    z-index: 1010;
+    box-shadow: 0 -3px 10px rgba(0,0,0,0.2);
 }
 .build-button {
-    padding: 8px 10px;
-    border: none;
+    padding: 7px 12px;
+    border: 1px solid rgba(71, 85, 105, 0.8); /* border-slate-600 */
     border-radius: 6px;
-    background-color: #4a5568; /* bg-slate-600 */
-    color: white;
+    background-color: #334155; /* bg-slate-700 */
+    color: #e2e8f0; /* slate-200 */
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.1s ease;
-    font-size: 0.85em;
+    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    font-size: 0.8rem;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.15);
 }
 .build-button:hover {
-    background-color: #3c4350; /* darker slate-600 */
+    background-color: #475569; /* bg-slate-600 */
+    border-color: rgba(96, 113, 134, 0.8);
 }
-.build-button.selected, .build-button.pan-button.selected,
-.build-button.select-button.selected, .build-button.view-mode-button.selected {
-    background-color: #2c3340; /* even darker slate */
+.build-button.selected {
+    background-color: #1e293b; /* bg-slate-800 (darker) */
+    color: white;
     transform: translateY(1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2) inset;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3), 0 1px 1px rgba(0,0,0,0.1);
+    border-color: #0f172a; /* slate-900 */
 }
-/* Custom button colors - these can be kept or managed by adding specific tailwind classes if preferred */
-.build-button.grass { background-color: #68a068; }
-.build-button.road { background-color: #718096; }
-.build-button.water { background-color: #63b3ed; }
-.build-button.park { background-color: #38a169; }
-.build-button.residential { background-color: #f6ad55; }
-.build-button.commercial { background-color: #9b59b6; }
-.build-button.industrial { background-color: #a0aec0; }
-.build-button.pan-button { background-color: #7f8c8d; }
-.build-button.select-button { background-color: #3498db; }
-.build-button.view-mode-button { background-color: #8e44ad; }
+/* Specific button colors for build types, ensure good contrast */
+.build-button.grass { background-color: #4d7c0f; } /* lime-700 */
+.build-button.road { background-color: #64748b; } /* slate-500 */
+.build-button.water { background-color: #0ea5e9; } /* sky-500 */
+.build-button.park { background-color: #16a34a; } /* green-600 */
+.build-button.residential { background-color: #f97316; } /* orange-500 */
+.build-button.commercial { background-color: #8b5cf6; } /* violet-500 */
+.build-button.industrial { background-color: #78716c; } /* stone-500 */
+
+.build-button.pan-button { background-color: #4b5563; } /* gray-600 */
+.build-button.select-button { background-color: #06b6d4; } /* cyan-500 */
+.build-button.view-mode-button { background-color: #6366f1; } /* indigo-500 */
+
+/* Hover for specific types */
+.build-button.grass:hover { background-color: #65a30d; }
+.build-button.road:hover { background-color: #94a3b8; }
+.build-button.water:hover { background-color: #38bdf8; }
+.build-button.park:hover { background-color: #22c55e; }
+.build-button.residential:hover { background-color: #fb923c; }
+.build-button.commercial:hover { background-color: #a78bfa; }
+.build-button.industrial:hover { background-color: #a1a1aa; }
+.build-button.pan-button:hover { background-color: #6b7280; }
+.build-button.select-button:hover { background-color: #22d3ee; }
+.build-button.view-mode-button:hover { background-color: #818cf8; }
 
 
 #messageBox {
     position: fixed;
-    top: 120px;
+    top: 80px; /* Adjusted to be below mainInfoPanel */
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(0,0,0,0.75);
+    background-color: rgba(15, 23, 42, 0.85); /* slate-900 with transparency */
     color: white;
-    padding: 12px 22px;
+    padding: 10px 20px;
     border-radius: 8px;
     z-index: 1000;
     display: none;
-    font-size: 1rem;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    font-size: 0.9rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
     max-width: 80%;
     text-align: center;
+    backdrop-filter: blur(3px);
 }
 
 #tileInfoPane {
     position: fixed;
-    top: 120px;
+    top: 80px; /* Adjusted */
     right: 20px;
-    background-color: rgba(255, 255, 255, 0.95);
+    background-color: rgba(30, 41, 59, 0.9); /* bg-slate-800 with more opacity */
     backdrop-filter: blur(5px);
     padding: 15px;
     border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
-    width: 290px;
-    font-size: 0.80rem;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    width: 280px;
+    font-size: 0.75rem;
     z-index: 1000;
     display: none;
-    color: #333;
+    color: #cbd5e1; /* slate-300 */
 }
 #tileInfoPane h3 {
-    color: #2c3e50; /* text-slate-700 */
-    font-size: 1.125rem; /* text-lg */
+    color: #f1f5f9; /* slate-100 */
+    font-size: 1rem; /* text-base */
     font-weight: bold;
-    margin-bottom: 0.5rem; /* mb-2 */
+    margin-bottom: 0.75rem; /* mb-3 */
 }
-#tileInfoPane p { margin-bottom: 4px; }
-#tileInfoPane span { font-weight: 600; color: #2980b9; }
+#tileInfoPane p { margin-bottom: 5px; }
+#tileInfoPane span { font-weight: 600; color: #93c5fd; } /* blue-300 */
 #closeInfoPane {
-    margin-top: 10px;
-    background-color: #e74c3c;
+    margin-top: 12px;
+    background-color: #ef4444; /* red-500 */
     color: white;
     border: none;
-    padding: 6px 12px;
+    padding: 7px 12px;
     border-radius: 5px;
     cursor: pointer;
     transition: background-color 0.2s;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     width: 100%;
-    margin-bottom: 5px;
 }
-#closeInfoPane:hover { background-color: #c0392b; }
+#closeInfoPane:hover { background-color: #dc2626; } /* red-600 */
 
 
-@media (max-width: 900px) {
-    #mainInfoPanel {
-        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-        font-size: 0.7em;
+@media (max-width: 768px) { /* md breakpoint */
+    #gameTitle {
+        font-size: 1.25rem; /* text-xl */
+        left: 15px;
+        top: 12px;
     }
-     #gameContainer {
-        margin-top: 180px;
+    #mainInfoPanel {
+        padding: 6px 8px;
+        gap: 4px;
+        grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+        max-width: calc(100vw - 20px); /* Take more width */
+        left: 50%;
+        transform: translateX(-50%); /* Center it on small screens */
+        right: auto;
+    }
+    #mainInfoPanel .info-label { font-size: 0.8em; }
+    #mainInfoPanel .info-value { font-size: 0.9em; }
+
+    .build-toolbar {
+        bottom: 10px;
+        padding: 8px;
+        gap: 5px;
+        width: calc(100% - 20px); /* More width, less padding */
+    }
+    .build-button {
+        padding: 6px 10px;
+        font-size: 0.75rem;
     }
     #messageBox, #tileInfoPane {
-        top: 150px;
+        top: 75px; /* Adjust if mainInfoPanel height changes significantly */
+        max-width: 90%;
+    }
+     #tileInfoPane {
+        width: 240px;
+        font-size: 0.7rem;
+        padding: 12px;
+        right: 10px;
     }
 }
- @media (max-width: 600px) {
-    .build-toolbar { flex-direction: column; align-items: stretch; }
-    .build-button { width: 100%; margin-bottom: 5px; }
-     #gameContainer {
-        margin-top: 200px;
+
+@media (max-width: 480px) { /* sm breakpoint */
+    #gameTitle { display: none; } /* Hide title on very small screens */
+    #mainInfoPanel {
+        grid-template-columns: repeat(2, 1fr); /* Force 2 columns */
+        font-size: 0.7rem;
+        max-width: calc(100vw - 10px);
+        top: 5px;
     }
-     #messageBox, #tileInfoPane {
-        top: 170px;
+    .build-toolbar {
+        flex-direction: row; /* Keep horizontal but allow wrap */
+        overflow-x: auto; /* Allow horizontal scroll if too many buttons */
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        width: calc(100% - 10px);
+        bottom: 5px;
+    }
+    .build-button {
+        flex-shrink: 0; /* Prevent buttons from shrinking */
+    }
+    #messageBox, #tileInfoPane {
+        top: 100px; /* May need fine-tuning based on mainInfoPanel height */
+    }
+    #tileInfoPane {
+        left: 50%;
+        transform: translateX(-50%);
+        top: auto;
+        bottom: 70px; /* Position above toolbar */
+        width: calc(100% - 20px);
+        max-width: 300px;
     }
 }

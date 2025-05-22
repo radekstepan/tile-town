@@ -73,6 +73,13 @@ export class Game {
         this.startGameLoop();
         this.buildToolbar.updateSelectedButtonVisuals(null, this.currentMode, this.currentBuildType);
         this.setCanvasCursor();
+        // Add resize listener here, once, after everything is set up
+        window.addEventListener('resize', () => this.handleResize());
+    }
+
+    private handleResize(): void {
+        this.setCanvasSize();
+        this.drawGame(); // Redraw with new dimensions and camera
     }
 
     private setupComponentInteractions(): void {
@@ -149,33 +156,22 @@ export class Game {
     }
 
     public setCanvasSize(): void {
-        const gameContainer = document.getElementById('gameContainer') as HTMLElement;
-        const titleElement = gameContainer.querySelector('h1') as HTMLElement;
-        if (!gameContainer || !titleElement) return;
-
-        const toolbarHeight = this.buildToolbar.getElement().offsetHeight;
-        const titleHeight = titleElement.offsetHeight;
-        const mainInfoPanelHeight = this.mainInfoPanel.getElement().offsetHeight;
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
         
-        let newCanvasWidth = Math.min(900, window.innerWidth * 0.92);
-        let availableHeight = window.innerHeight - (mainInfoPanelHeight + 20) - toolbarHeight - titleHeight - 60;
-        let newCanvasHeight = Math.min(600, availableHeight);
-        
-        newCanvasWidth = Math.max(300, newCanvasWidth);
-        newCanvasHeight = Math.max(200, newCanvasHeight);
-        
-        this.canvas.width = newCanvasWidth;
-        this.canvas.height = newCanvasHeight;
-        
+        // Recalculate camera offsets to center the grid in the new canvas size
         const gridPixelWidth = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO;
         const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO;
         
+        // If it's the first time (cameraOffset is 0 or uninitialized), center it.
+        // Otherwise, try to maintain the current view (e.g. user panned).
+        // For simplicity on this request, we'll re-center on resize.
+        // A more advanced approach would adjust offset to keep the current "center point" of view.
         this.cameraOffsetX = (this.canvas.width - gridPixelWidth) / 2;
-        this.cameraOffsetY = (this.canvas.height - gridPixelHeight) / 2 + C.TILE_HALF_HEIGHT_ISO * (Math.min(C.GRID_SIZE_X, C.GRID_SIZE_Y) / 2.5);
+        this.cameraOffsetY = (this.canvas.height - gridPixelHeight) / 2 + C.TILE_HALF_HEIGHT_ISO * (Math.min(C.GRID_SIZE_X, C.GRID_SIZE_Y) / 2.0); // Adjusted Y centering slightly
         
         this.setCanvasCursor();
-        this.drawGame();
-        window.addEventListener('resize', () => this.setCanvasSize()); // Add resize listener here
+        // Note: drawGame() will be called by handleResize or initializeGame after this
     }
 
     public drawGame(): void {
