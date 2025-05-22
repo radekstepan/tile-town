@@ -62,20 +62,28 @@ export class Game {
         this.renderer = new Renderer(this.canvas);
         // Pass `this` (Game instance) to controllers that need to access its state or methods
         this.simulationController = new SimulationController(this.gridController, this);
-        this.inputController = new InputController(this.canvas, this);
+        // InputController is initialized in initializeGame after canvas setup
     }
 
     public initializeGame(): void {
         this.setupComponentInteractions();
+        // Ensure GridController is fully initialized if it wasn't in constructor or if it has async parts
+        // this.gridController.initializeGrid(); // Assuming GridController's constructor does this
+
         this.simulationController.calculateCityMetrics(); // Initial calculation based on generated grid
         this.updateAllUI();
-        this.setCanvasSize(); 
-        // InputController's constructor already calls setupEventListeners
+        this.setCanvasSize(); // Computes camera offsets
+        
+        // Initialize InputController after canvas is sized and basic game state is ready
+        this.inputController = new InputController(this.canvas, this);
+
         this.startGameLoop();
         this.buildToolbar.updateSelectedButtonVisuals(null, this.currentMode, this.currentBuildType);
         this.setCanvasCursor();
-        // Add resize listener here, once, after everything is set up
+        
         window.addEventListener('resize', () => this.handleResize());
+        
+        this.drawGame(); // Crucial: Draw the game for the first time with centered offsets
     }
 
     private handleResize(): void {
@@ -160,13 +168,30 @@ export class Game {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
         
-        const gridPixelWidth = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO;
+        // const gridPixelWidth = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO; // Not directly needed for new offset calculation if done right
         const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO;
         
-        this.cameraOffsetX = (this.canvas.width - gridPixelWidth) / 2;
-        this.cameraOffsetY = (this.canvas.height - gridPixelHeight) / 2 + C.TILE_HALF_HEIGHT_ISO * (Math.min(C.GRID_SIZE_X, C.GRID_SIZE_Y) / 2.0);
+        // Centering logic for isometric grid:
+        // cameraOffsetX is the screen X-coordinate of the top point of tile (0,0).
+        // cameraOffsetY is the screen Y-coordinate of the top point of tile (0,0).
+
+        // To center horizontally:
+        // The horizontal center of the grid's bounding box should be at canvas.width / 2.
+        // Leftmost point of bounding box relative to cameraOffsetX: -GRID_SIZE_Y * TILE_HALF_WIDTH_ISO
+        // Rightmost point of bounding box relative to cameraOffsetX: +GRID_SIZE_X * TILE_HALF_WIDTH_ISO
+        // The center of this span relative to cameraOffsetX is: ( (GX*THW) - (GY*THW) ) / 2 = (GX - GY) * THW / 2
+        // So, cameraOffsetX + (C.GRID_SIZE_X - C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO / 2 = this.canvas.width / 2
+        this.cameraOffsetX = this.canvas.width / 2 - (C.GRID_SIZE_X - C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO / 2;
+
+        // To center vertically:
+        // The vertical center of the grid's bounding box should be at canvas.height / 2.
+        // Topmost point of bounding box relative to cameraOffsetY: 0
+        // Bottommost point of bounding box relative to cameraOffsetY: gridPixelHeight
+        // The center of this span relative to cameraOffsetY is: gridPixelHeight / 2
+        // So, cameraOffsetY + gridPixelHeight / 2 = this.canvas.height / 2
+        this.cameraOffsetY = this.canvas.height / 2 - gridPixelHeight / 2;
         
-        this.setCanvasCursor();
+        this.setCanvasCursor(); // Update cursor based on current mode
     }
 
     public drawGame(): void {
@@ -290,9 +315,9 @@ export class Game {
                 
                 const newTile = this.gridController.getTile(gridX, gridY)!;
                 if (selectedTool.parentZoneCategory === 'residential' && selectedTool.isBuilding) {
-                    newTile.satisfactionData = this.simulationController['getDefaultSatisfactionData']();
+                    newTile.satisfactionData = (this.simulationController as any).getDefaultSatisfactionData(); // Accessing private method via 'any' for brevity
                 } else if ((selectedTool.parentZoneCategory === 'commercial' || selectedTool.parentZoneCategory === 'industrial') && selectedTool.isBuilding) {
-                    newTile.operationalData = this.simulationController['getDefaultOperationalData']();
+                    newTile.operationalData = (this.simulationController as any).getDefaultOperationalData(); // Accessing private method
                 }
 
                 this.messageBox.show(`${messageAction} ${oldTypeName && messageAction === "Replaced" ? oldTypeName : ""} with ${selectedTool.name} for $${selectedTool.cost}`.replace("  ", " "), 2500);
