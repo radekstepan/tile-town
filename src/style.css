@@ -89,10 +89,13 @@ body {
     border-radius: 10px;
     display: flex;
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; /* Ensure single row */
+    overflow-x: auto; /* Allow horizontal scroll if needed */
+    align-items: center; /* Vertically align items if heights differ */
     justify-content: center;
     z-index: 1010;
     box-shadow: 0 -3px 10px rgba(0,0,0,0.2);
+    max-width: calc(100vw - 30px); /* Prevent edge collision on small screens */
 }
 .build-button {
     padding: 7px 12px;
@@ -105,6 +108,9 @@ body {
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
     font-size: 0.8rem;
     box-shadow: 0 2px 3px rgba(0,0,0,0.15);
+    display: inline-flex; /* For icon alignment */
+    align-items: center;
+    white-space: nowrap; /* Prevent text wrapping within buttons */
 }
 .build-button:hover {
     background-color: #475569; /* bg-slate-600 */
@@ -117,6 +123,36 @@ body {
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.3), 0 1px 1px rgba(0,0,0,0.1);
     border-color: #0f172a; /* slate-900 */
 }
+
+/* Icon styling */
+.icon-span {
+    margin-right: 5px;
+    font-size: 0.9em; /* Slightly smaller than button text */
+    line-height: 1; /* Ensure it doesn't mess with button height */
+}
+
+/* Muted colors for Pan, Select, View */
+.build-button.pan-button,
+.build-button.select-button,
+.build-button.view-mode-button {
+    background-color: #4b5563; /* gray-600 */
+    border-color: #6b7280; /* gray-500 */
+}
+.build-button.pan-button:hover,
+.build-button.select-button:hover,
+.build-button.view-mode-button:hover {
+    background-color: #525e6f; /* slightly lighter gray */
+    border-color: #7c8899;
+}
+.build-button.pan-button.selected,
+.build-button.select-button.selected,
+.build-button.view-mode-button.selected { /* View button might not use 'selected' in the same way */
+    background-color: #374151; /* gray-700 */
+    color: white;
+    border-color: #1f2937; /* gray-800 */
+}
+
+
 /* Specific button colors for build types, ensure good contrast */
 .build-button.grass { background-color: #4d7c0f; } /* lime-700 */
 .build-button.road { background-color: #64748b; } /* slate-500 */
@@ -126,10 +162,6 @@ body {
 .build-button.commercial { background-color: #8b5cf6; } /* violet-500 */
 .build-button.industrial { background-color: #78716c; } /* stone-500 */
 
-.build-button.pan-button { background-color: #4b5563; } /* gray-600 */
-.build-button.select-button { background-color: #06b6d4; } /* cyan-500 */
-.build-button.view-mode-button { background-color: #6366f1; } /* indigo-500 */
-
 /* Hover for specific types */
 .build-button.grass:hover { background-color: #65a30d; }
 .build-button.road:hover { background-color: #94a3b8; }
@@ -138,9 +170,16 @@ body {
 .build-button.residential:hover { background-color: #fb923c; }
 .build-button.commercial:hover { background-color: #a78bfa; }
 .build-button.industrial:hover { background-color: #a1a1aa; }
-.build-button.pan-button:hover { background-color: #6b7280; }
-.build-button.select-button:hover { background-color: #22d3ee; }
-.build-button.view-mode-button:hover { background-color: #818cf8; }
+
+
+/* Toolbar Separator */
+.toolbar-separator {
+    width: 1px;
+    height: 20px; /* Adjust height to match button inner height roughly */
+    background-color: rgba(71, 85, 105, 0.6); /* slate-600 with transparency */
+    margin-left: 4px; /* Space before separator */
+    margin-right: 8px; /* Space after separator */
+}
 
 
 #messageBox {
@@ -221,7 +260,7 @@ body {
         bottom: 10px;
         padding: 8px;
         gap: 5px;
-        width: calc(100% - 20px); /* More width, less padding */
+        /* width: calc(100% - 20px); /* More width, less padding -> removed to allow content to define width with max-width */
     }
     .build-button {
         padding: 6px 10px;
@@ -248,11 +287,11 @@ body {
         top: 5px;
     }
     .build-toolbar {
-        flex-direction: row; /* Keep horizontal but allow wrap */
-        overflow-x: auto; /* Allow horizontal scroll if too many buttons */
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-        width: calc(100% - 10px);
+        /* flex-direction: row; /* Keep horizontal but allow wrap */
+        /* overflow-x: auto; /* Allow horizontal scroll if too many buttons */
+        /* flex-wrap: nowrap; -> already set */
+        justify-content: flex-start; /* Align to start when scrolling */
+        /* width: calc(100% - 10px); -> removed, max-width handles this */
         bottom: 5px;
     }
     .build-button {
@@ -265,7 +304,7 @@ body {
         left: 50%;
         transform: translateX(-50%);
         top: auto;
-        bottom: 70px; /* Position above toolbar */
+        bottom: 60px; /* Position above toolbar (adjust if toolbar height changes) */
         width: calc(100% - 20px);
         max-width: 300px;
     }

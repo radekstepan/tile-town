@@ -17,12 +17,15 @@ export class BuildToolbar {
 
     private render(): void {
         this.element.innerHTML = `
-            <button class="build-button pan-button" data-type="pan">Pan</button>
-            <button class="build-button select-button" data-type="select">Select</button>
-            <button class="build-button view-mode-button" id="viewModeButton" data-type="view_mode">View: Default</button>
+            <button class="build-button pan-button" data-type="pan"><span class="icon-span">✥</span>Pan</button>
+            <button class="build-button select-button" data-type="select"><span class="icon-span">⊕</span>Select</button>
+            <button class="build-button view-mode-button" id="viewModeButton" data-type="view_mode"><span class="icon-span">👁</span>View: Default</button>
+            
+            <div class="toolbar-separator"></div>
+
             <button class="build-button grass" data-type="grass">Grass</button>
-            <button class="build-button road" data-type="road">Road</button>
             <button class="build-button water" data-type="water">Water</button>
+            <button class="build-button road" data-type="road">Road</button>
             <button class="build-button park" data-type="park">Park</button>
             <button class="build-button residential" data-type="residential_zone">Residential</button>
             <button class="build-button commercial" data-type="commercial_zone">Commercial</button>
@@ -58,16 +61,17 @@ export class BuildToolbar {
     }
 
     public updateViewModeButtonText(currentViewMode: ViewMode): void {
+        const iconSpan = `<span class="icon-span">👁</span>`;
         if (currentViewMode === 'satisfaction_heatmap') {
-            this.viewModeButton.textContent = 'View: Satisfaction';
+            this.viewModeButton.innerHTML = `${iconSpan}View: Satisfaction`;
         } else {
-            this.viewModeButton.textContent = 'View: Default';
+            this.viewModeButton.innerHTML = `${iconSpan}View: Default`;
         }
     }
     
     public updateSelectedButtonVisuals(activeToolOrBuildTypeId: string | null, currentMode?: GameMode, currentBuildType?: TileType | null): void {
         this.element.querySelectorAll<HTMLButtonElement>('.build-button').forEach(btn => {
-            btn.classList.remove('selected', 'ring-2', 'ring-offset-2', 'ring-sky-500');
+            btn.classList.remove('selected'); // Simplified selection class
             const btnType = btn.dataset.type;
             if (!btnType) return;
 
@@ -75,12 +79,12 @@ export class BuildToolbar {
             if (currentMode === 'pan' && btnType === 'pan') isSelected = true;
             else if (currentMode === 'select' && btnType === 'select') isSelected = true;
             else if (currentMode === 'build' && currentBuildType && btnType === currentBuildType.id) isSelected = true;
+            // View mode button is not a 'mode' that stays selected in the same way, 
+            // but we can add 'selected' if its current view is active.
+            // For now, keeping it simple: only tool/build buttons get 'selected' state.
 
-            // The view mode button selection is handled slightly differently (toggles visual state, not a mode)
-            if (btn.id === 'viewModeButton') {
-                // it could have a selected state if we want, but the original didn't focus on it like other tools
-            } else if (isSelected) {
-                btn.classList.add('selected', 'ring-2', 'ring-offset-2', 'ring-sky-500');
+            if (isSelected) {
+                btn.classList.add('selected');
             }
         });
     }
