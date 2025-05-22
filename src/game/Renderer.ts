@@ -33,6 +33,7 @@ export class Renderer {
         this.ctx.translate(screenX, screenY);
         this.ctx.globalAlpha = customAlpha;
 
+        // --- Base tile ---
         this.ctx.beginPath();
         this.ctx.moveTo(0, 0);
         this.ctx.lineTo(C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -43,25 +44,32 @@ export class Renderer {
         this.ctx.fillStyle = tileType.color;
         this.ctx.fill();
 
-        if (isSelected) { // Removed currentViewMode === 'default' check, selection highlight always visible
-            this.ctx.strokeStyle = '#FFFF00'; 
-            this.ctx.lineWidth = 2; 
+        // --- Border style setup ---
+        if (isSelected) {
+            this.ctx.strokeStyle = '#FFFF00'; // Bright yellow for selected
+            this.ctx.lineWidth = 2;          // Keep selected thicker
         } else {
+            // "A smidgen more" prominent borders, still matching tile color
+            this.ctx.lineWidth = customAlpha < 1.0 ? 0.35 : 0.7; // Another slight increase
+            // For base tile, border is an even more noticeably darker version of tileType.color
             this.ctx.strokeStyle = customAlpha < 1.0 
-                ? darkenColor(tileType.color, 5)  
-                : darkenColor(tileType.color, 10); 
-            this.ctx.lineWidth = customAlpha < 1.0 
-                ? 0.3 
-                : 0.5; 
+                ? darkenColor(tileType.color, 12)  // For translucent preview
+                : darkenColor(tileType.color, 18); // For regular tiles
         }
+        // Stroke for the base tile
         this.ctx.stroke(); 
 
+        // --- 3D Part (Building/Object) ---
         if (tileType.renderHeight && tileType.renderHeight > 0) {
             const buildingVisualHeight = tileType.renderHeight * C.TILE_DEPTH_UNIT;
             const topColor = lightenColor(tileType.color, 15);
             const sideColorDark = darkenColor(tileType.color, 15); 
             const sideColorLight = darkenColor(tileType.color, 5);  
 
+            // Line width is already set (either for selected or non-selected state from above).
+            // For non-selected 3D parts, their stroke color should be a darker version of their own fill.
+
+            // --- Right Side ---
             this.ctx.fillStyle = sideColorDark;
             this.ctx.beginPath();
             this.ctx.moveTo(C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -70,8 +78,12 @@ export class Renderer {
             this.ctx.lineTo(0, 0);
             this.ctx.closePath();
             this.ctx.fill();
+            if (!isSelected) { // Only change strokeStyle if not selected
+                this.ctx.strokeStyle = darkenColor(sideColorDark, 18); // Match base tile's relative darkness
+            }
             this.ctx.stroke(); 
 
+            // --- Left Side ---
             this.ctx.fillStyle = sideColorLight;
             this.ctx.beginPath();
             this.ctx.moveTo(-C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -80,8 +92,12 @@ export class Renderer {
             this.ctx.lineTo(0, 0);
             this.ctx.closePath();
             this.ctx.fill();
+            if (!isSelected) {
+                this.ctx.strokeStyle = darkenColor(sideColorLight, 18); // Match base tile's relative darkness
+            }
             this.ctx.stroke(); 
             
+            // --- Top Face ---
             this.ctx.fillStyle = topColor;
             this.ctx.beginPath();
             this.ctx.moveTo(0, -buildingVisualHeight);
@@ -90,6 +106,9 @@ export class Renderer {
             this.ctx.lineTo(-C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO - buildingVisualHeight);
             this.ctx.closePath();
             this.ctx.fill();
+            if (!isSelected) {
+                this.ctx.strokeStyle = darkenColor(topColor, 18); // Match base tile's relative darkness
+            }
             this.ctx.stroke(); 
         }
         this.ctx.restore();
