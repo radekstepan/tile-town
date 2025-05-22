@@ -1,0 +1,200 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    background-color: #f0f4f8; /* bg-slate-100 equivalent */
+    margin: 0;
+    padding-top: 20px;
+    overflow-x: hidden;
+}
+#gameContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* shadow-xl rough equivalent */
+    max-width: 95vw;
+    margin-top: 120px;
+}
+#gameCanvas {
+    background-color: #72a372;
+    border-radius: 8px;
+    max-width: 100%;
+}
+.pan-mode-active { cursor: grab; }
+.pan-mode-dragging { cursor: grabbing; }
+.select-mode-active { cursor: crosshair; }
+
+#mainInfoPanel {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 15px;
+    background-color: rgba(233, 238, 242, 0.95);
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    text-align: center;
+    width: auto;
+    min-width: 320px;
+    max-width: 95vw;
+    z-index: 1010;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 6px;
+    font-size: 0.8em;
+}
+#mainInfoPanel div {
+    padding: 4px;
+    background-color: rgba(255,255,255,0.5);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+#mainInfoPanel .info-label {
+    font-size: 0.85em;
+    color: #555;
+    margin-bottom: 1px;
+}
+#mainInfoPanel .info-value {
+    font-weight: 600;
+    font-size: 0.95em;
+}
+.positive-net { color: #27ae60; }
+.negative-net { color: #c0392b; }
+
+
+.build-toolbar {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #e2e8f0; /* bg-slate-200 */
+    border-radius: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.build-button {
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background-color: #4a5568; /* bg-slate-600 */
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+    font-size: 0.85em;
+}
+.build-button:hover {
+    background-color: #3c4350; /* darker slate-600 */
+}
+.build-button.selected, .build-button.pan-button.selected,
+.build-button.select-button.selected, .build-button.view-mode-button.selected {
+    background-color: #2c3340; /* even darker slate */
+    transform: translateY(1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2) inset;
+}
+/* Custom button colors - these can be kept or managed by adding specific tailwind classes if preferred */
+.build-button.grass { background-color: #68a068; }
+.build-button.road { background-color: #718096; }
+.build-button.water { background-color: #63b3ed; }
+.build-button.park { background-color: #38a169; }
+.build-button.residential { background-color: #f6ad55; }
+.build-button.commercial { background-color: #9b59b6; }
+.build-button.industrial { background-color: #a0aec0; }
+.build-button.pan-button { background-color: #7f8c8d; }
+.build-button.select-button { background-color: #3498db; }
+.build-button.view-mode-button { background-color: #8e44ad; }
+
+
+#messageBox {
+    position: fixed;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0,0,0,0.75);
+    color: white;
+    padding: 12px 22px;
+    border-radius: 8px;
+    z-index: 1000;
+    display: none;
+    font-size: 1rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    max-width: 80%;
+    text-align: center;
+}
+
+#tileInfoPane {
+    position: fixed;
+    top: 120px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(5px);
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+    width: 290px;
+    font-size: 0.80rem;
+    z-index: 1000;
+    display: none;
+    color: #333;
+}
+#tileInfoPane h3 {
+    color: #2c3e50; /* text-slate-700 */
+    font-size: 1.125rem; /* text-lg */
+    font-weight: bold;
+    margin-bottom: 0.5rem; /* mb-2 */
+}
+#tileInfoPane p { margin-bottom: 4px; }
+#tileInfoPane span { font-weight: 600; color: #2980b9; }
+#closeInfoPane {
+    margin-top: 10px;
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.85rem;
+    width: 100%;
+    margin-bottom: 5px;
+}
+#closeInfoPane:hover { background-color: #c0392b; }
+
+
+@media (max-width: 900px) {
+    #mainInfoPanel {
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        font-size: 0.7em;
+    }
+     #gameContainer {
+        margin-top: 180px;
+    }
+    #messageBox, #tileInfoPane {
+        top: 150px;
+    }
+}
+ @media (max-width: 600px) {
+    .build-toolbar { flex-direction: column; align-items: stretch; }
+    .build-button { width: 100%; margin-bottom: 5px; }
+     #gameContainer {
+        margin-top: 200px;
+    }
+     #messageBox, #tileInfoPane {
+        top: 170px;
+    }
+}

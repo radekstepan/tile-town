@@ -1,0 +1,42 @@
+export const MAX_SATISFACTION = 100;
+export const SATISFACTION_LOW_THRESHOLD = 35;
+export const SATISFACTION_HIGH_THRESHOLD = 65;
+export const SATISFACTION_VISUAL_CHANGE_THRESHOLD = 2;
+export const LOW_EMPLOYMENT_THRESHOLD = 70;
+export const LOW_EMPLOYMENT_SATISFACTION_PENALTY = -15;
+
+export const WORK_PROXIMITY_RADIUS = 5;
+export const WORK_PROXIMITY_MAX_BONUS = 25;
+export const NATURE_PROXIMITY_RADIUS = 4;
+export const PARK_PROXIMITY_BONUS = 15;
+export const WATER_PROXIMITY_BONUS = 10;
+export const MOUNTAIN_PROXIMITY_BONUS = 5;
+export const INDUSTRIAL_POLLUTION_RADIUS = 4;
+export const INDUSTRIAL_POLLUTION_PENALTY_MAX = -20;
+
+export const DENSITY_RADIUS = 2;
+export const DENSITY_IDEAL_MIN = 2;
+export const DENSITY_IDEAL_MAX = 4;
+export const DENSITY_BONUS = 15;
+export const DENSITY_PENALTY_LOW = -10;
+export const DENSITY_PENALTY_HIGH = -15;
+
+export const MAX_OPERATIONAL_SCORE = 100;
+export const OP_LOW_THRESHOLD = 35;
+export const OP_HIGH_THRESHOLD = 65;
+export const OPERATIONAL_VISUAL_CHANGE_THRESHOLD = 2;
+export const WORKER_ACCESS_RADIUS = 6;
+export const WORKER_ACCESS_MAX_BONUS = 50;
+export const CUSTOMER_ACCESS_RADIUS = 7;
+export const CUSTOMER_ACCESS_MAX_BONUS = 50;
+
+export const GRID_SIZE_X = 25;
+export const GRID_SIZE_Y = 25;
+export const TILE_WIDTH_ISO = 64;
+export const TILE_HEIGHT_ISO = TILE_WIDTH_ISO / 2;
+export const TILE_HALF_WIDTH_ISO = TILE_WIDTH_ISO / 2;
+export const TILE_HALF_HEIGHT_ISO = TILE_HEIGHT_ISO / 2;
+export const TILE_DEPTH_UNIT = TILE_HEIGHT_ISO * 0.75;
+export const GAME_TICK_INTERVAL = 7000;
+
+export const INITIAL_BUDGET = 2000;
