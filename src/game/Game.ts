@@ -22,7 +22,7 @@ export class Game {
     public playerBudget: number = C.INITIAL_BUDGET;
     public cameraOffsetX: number = 0;
     public cameraOffsetY: number = 0;
-    public isDragging: boolean = false;
+    public isDragging: boolean = false; // Used for panning OR painting
     public lastMouseX: number = 0;
     public lastMouseY: number = 0;
     public lastTouchX: number | null = null;
@@ -33,6 +33,7 @@ export class Game {
     public gameDay: number = 0;
     public citySatisfaction: number = 50;
     public employmentRate: number = 100;
+    public lastBuiltTileDuringDrag: Coordinates | null = null; // For paint-build
 
     // UI Components
     public mainInfoPanel: MainInfoPanel;
@@ -159,19 +160,13 @@ export class Game {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
         
-        // Recalculate camera offsets to center the grid in the new canvas size
         const gridPixelWidth = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO;
         const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO;
         
-        // If it's the first time (cameraOffset is 0 or uninitialized), center it.
-        // Otherwise, try to maintain the current view (e.g. user panned).
-        // For simplicity on this request, we'll re-center on resize.
-        // A more advanced approach would adjust offset to keep the current "center point" of view.
         this.cameraOffsetX = (this.canvas.width - gridPixelWidth) / 2;
-        this.cameraOffsetY = (this.canvas.height - gridPixelHeight) / 2 + C.TILE_HALF_HEIGHT_ISO * (Math.min(C.GRID_SIZE_X, C.GRID_SIZE_Y) / 2.0); // Adjusted Y centering slightly
+        this.cameraOffsetY = (this.canvas.height - gridPixelHeight) / 2 + C.TILE_HALF_HEIGHT_ISO * (Math.min(C.GRID_SIZE_X, C.GRID_SIZE_Y) / 2.0);
         
         this.setCanvasCursor();
-        // Note: drawGame() will be called by handleResize or initializeGame after this
     }
 
     public drawGame(): void {
@@ -243,6 +238,10 @@ export class Game {
         }
     }
 
+    /**
+     * Handles a build interaction on a specific canvas tile.
+     * @returns `true` if a tile was successfully placed/modified, `false` otherwise.
+     */
     public handleCanvasBuildInteraction(gridX: number, gridY: number): boolean {
         if (this.currentMode !== 'build' || !this.currentBuildType) return false;
         
@@ -254,14 +253,14 @@ export class Game {
 
         if (tileData.type.isObstacle && selectedTool.id !== tileData.type.id) {
             this.messageBox.show("Cannot build on mountains.", 2000);
-            return true;
+            return false;
         }
         if (selectedTool.id === 'grass' && tileData.type.isObstacle) {
             this.messageBox.show("Mountains cannot be removed.", 2000);
-            return true;
+            return false;
         }
 
-        if (selectedTool.id === 'grass') {
+        if (selectedTool.id === 'grass') { // Bulldozing
             if (tileData.type.id !== 'grass') {
                 this.messageBox.show(`Cleared ${tileData.type.name}.`, 1500);
                 this.gridController.clearTileData(gridX, gridY);
@@ -274,10 +273,12 @@ export class Game {
                 }
                 this.updateAllUI();
                 this.drawGame();
+                return true; // Tile modified
             }
-            return true;
+            return false; // Already grass, no change
         }
 
+        // Building something else
         if (tileData.type.id === 'grass' || tileData.type.id !== selectedTool.id) { 
             if (this.playerBudget >= selectedTool.cost) {
                 let messageAction = tileData.type.id === 'grass' ? "Built" : "Replaced";
@@ -315,13 +316,17 @@ export class Game {
                 this.simulationController.calculateCityMetrics(); 
                 this.updateAllUI();
                 this.drawGame();
+                return true; // Tile modified
             } else {
                 this.messageBox.show(`Not enough funds for ${selectedTool.name}. Cost: $${selectedTool.cost}. Budget: $${this.playerBudget.toFixed(0)}`, 2500);
+                return false; // Not enough funds
             }
-            return true;
         }
-        this.messageBox.show(`This is already a ${tileData.type.name}.`, 1500);
-        return true;
+        // If trying to build the same tile type again (and not grass)
+        if (tileData.type.id === selectedTool.id && selectedTool.id !== 'grass') {
+            this.messageBox.show(`This is already a ${tileData.type.name}.`, 1500);
+        }
+        return false; // No change or action failed
     }
 
     private startGameLoop(): void {
