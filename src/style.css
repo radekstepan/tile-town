@@ -31,7 +31,16 @@ body {
     color: white;
     text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
     font-size: 1.5rem; /* text-2xl */
+    padding: 2px 5px; /* Add a little padding for better editing experience */
+    border-radius: 4px; /* Optional: slightly rounded corners */
 }
+
+#gameTitle[contenteditable="true"]:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.7); /* A light outline to indicate focus */
+    background-color: rgba(0,0,0,0.2); /* Slight background change on focus */
+    cursor: text;
+}
+
 
 #mainInfoPanel {
     position: fixed;
