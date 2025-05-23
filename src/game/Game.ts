@@ -16,9 +16,10 @@ export class Game {
     private canvas: HTMLCanvasElement;
     
     // Game State
-    public currentMode: GameMode = 'pan';
+    public currentMode: GameMode = 'pan'; // Start in pan mode
     public currentViewMode: ViewMode = 'default';
-    public currentBuildType: TileType | null = null;
+    public currentBuildType: TileType | null = null; 
+
     public playerBudget: number = C.INITIAL_BUDGET;
     public cameraOffsetX: number = 0;
     public cameraOffsetY: number = 0;
@@ -27,28 +28,24 @@ export class Game {
     public lastMouseY: number = 0;
     public lastTouchX: number | null = null;
     public lastTouchY: number | null = null;
-    public hoveredTile: Coordinates | null = null;
-    public selectedTileCoords: Coordinates | null = null;
+    public hoveredTile: Coordinates | null = null; 
     private gameTickIntervalId: number | null = null;
     public gameDay: number = 0;
     
-    // City-wide stats (updated by SimulationController)
     public totalPopulation: number = 0;
-    public citySatisfaction: number = 50; // Now an aggregate of residential tile values
+    public citySatisfaction: number = 50; 
     public employmentRate: number = 100;
     
     public lastBuiltTileDuringDrag: Coordinates | null = null; 
 
-    // UI Components
     public mainInfoPanel: MainInfoPanel;
     public buildToolbar: BuildToolbar;
     public messageBox: MessageBox;
     public tileInfoPane: TileInfoPane;
 
-    // Controllers
     private gridController: GridController;
     private renderer: Renderer;
-    public simulationController: SimulationController; // Made public for Renderer to access map data
+    public simulationController: SimulationController; 
     private inputController: InputController;
 
 
@@ -61,21 +58,24 @@ export class Game {
         this.tileInfoPane = new TileInfoPane();
 
         this.gridController = new GridController();
-        // Pass a getter for 'this' to renderer for late-binding access to simulationController
         this.renderer = new Renderer(this.canvas, () => this); 
         this.simulationController = new SimulationController(this.gridController, this);
     }
 
     public initializeGame(): void {
         this.setupComponentInteractions();
-        const initialFinance = this.simulationController.processGameTick(); // Run initial simulation pass for map data
-        this.updateAllUI(initialFinance.taxes, initialFinance.costs, initialFinance.net); // Update UI with initial state
+        const initialFinance = this.simulationController.processGameTick(); 
+        this.updateAllUI(initialFinance.taxes, initialFinance.costs, initialFinance.net); 
         this.setCanvasSize(); 
         
         this.inputController = new InputController(this.canvas, this);
 
+        this.currentMode = 'pan'; 
+        this.currentBuildType = null; 
+        this.messageBox.show('Pan mode active. Select a tool or pan the map.', 1500);
+
         this.startGameLoop();
-        this.buildToolbar.updateSelectedButtonVisuals(null, this.currentMode, this.currentBuildType);
+        this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
         this.setCanvasCursor();
         
         window.addEventListener('resize', () => this.handleResize());
@@ -90,73 +90,73 @@ export class Game {
 
     private setupComponentInteractions(): void {
         this.buildToolbar.setupEventListeners(
-            (toolType, tileType) => this.handleToolSelection(toolType as GameMode | 'build', tileType),
-            (newMode) => this.setViewMode(newMode) // Updated to receive new mode
+            (toolAction, tileType) => this.handleToolSelection(toolAction, tileType), 
+            (newMode) => this.setViewMode(newMode) 
         );
-        this.tileInfoPane.setupCloseButton(() => {
-            this.tileInfoPane.hide();
-            this.selectedTileCoords = null;
-            this.drawGame();
-        });
     }
     
-    public handleToolSelection(tool: GameMode | 'build', tileType: TileType | null): void {
-        // No automatic view mode change on tool selection, keep current view mode
-        // if (this.currentViewMode !== 'default' && tool !== 'pan' && tool !== 'select') {
-        //     this.setViewMode('default');
-        // }
+    public handleToolSelection(toolAction: string, tileType: TileType | null): void {
+        let needsRedrawForBuildPreview = false;
+        const oldBuildPreviewActive = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
 
-        if (tool === 'pan') {
-            this.currentMode = 'pan';
-            this.currentBuildType = null;
-            this.messageBox.show('Pan mode activated.', 2000);
-        } else if (tool === 'select') {
-            this.currentMode = 'select';
-            this.currentBuildType = null;
-            this.messageBox.show('Select mode activated. Click a tile for info.', 2000);
-        } else if (tool === 'build' && tileType) {
-            this.currentMode = 'build';
-            this.currentBuildType = tileType;
+        if (toolAction === 'pan_toggle') {
+            if (this.currentMode === 'pan') {
+                this.currentMode = 'build';
+                this.currentBuildType = null; 
+                this.messageBox.show('Inspect mode. Hover for info or select a build tool.', 2000);
+            } else {
+                this.currentMode = 'pan';
+                this.currentBuildType = null; 
+                this.messageBox.show('Pan mode activated.', 2000);
+            }
+        } else if (toolAction === 'build' && tileType) {
+            this.currentMode = 'build';       
+            this.currentBuildType = tileType;  
             this.messageBox.show(`Selected to build: ${this.currentBuildType.name} ($${this.currentBuildType.cost})`, 1500);
         }
 
-        if (this.hoveredTile && this.currentMode !== 'build') {
-            this.hoveredTile = null;
-        }
-        if (this.currentMode !== 'select') {
-            this.tileInfoPane.hide();
-            this.selectedTileCoords = null;
-        }
-        this.buildToolbar.updateSelectedButtonVisuals(
-            this.currentMode === 'build' && this.currentBuildType ? this.currentBuildType.id : this.currentMode,
-            this.currentMode,
-            this.currentBuildType
-        );
+        this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
         this.setCanvasCursor();
-        this.drawGame();
+
+        // Determine if build preview state changed *after* mode/tool update
+        const newBuildPreviewActive = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
+        if (oldBuildPreviewActive !== newBuildPreviewActive) {
+            needsRedrawForBuildPreview = true;
+        }
+        
+        // Update hover tile display based on the new state
+        this.updateHoveredTileDisplay(this.hoveredTile); // Pass current hovered coords
+
+        if (needsRedrawForBuildPreview) {
+            this.drawGame(); // Redraw if build preview changed
+        }
     }
 
     public setViewMode(newMode: ViewMode): void {
+        const oldViewMode = this.currentViewMode;
         this.currentViewMode = newMode;
+        this.buildToolbar.updateViewModeButtonText(this.currentViewMode); 
+
         let modeName = "Default";
         if (newMode === 'tile_value_heatmap') modeName = "Tile Value Heatmap";
         else if (newMode === 'pollution_heatmap') modeName = "Pollution Heatmap";
         this.messageBox.show(`${modeName} view active.`, 2000);
-        this.buildToolbar.updateViewModeButtonText(this.currentViewMode); // Ensure button text is updated
-        this.drawGame();
+        
+        // If view mode changed, this might affect info pane or build preview
+        this.updateHoveredTileDisplay(this.hoveredTile); 
+        if (oldViewMode !== newMode) { // Always redraw if view mode actually changed
+            this.drawGame();
+        }
     }
 
 
     public setCanvasCursor(): void {
-        this.canvas.classList.remove('pan-mode-active', 'pan-mode-dragging', 'select-mode-active');
+        this.canvas.classList.remove('pan-mode-active', 'pan-mode-dragging'); 
         if (this.currentMode === 'pan') {
             this.canvas.classList.add('pan-mode-active');
             this.canvas.style.cursor = this.isDragging ? 'grabbing' : 'grab';
-        } else if (this.currentMode === 'select') {
-            this.canvas.classList.add('select-mode-active');
-            this.canvas.style.cursor = 'crosshair';
         } else { 
-            this.canvas.style.cursor = 'pointer'; // Default for build mode
+             this.canvas.style.cursor = 'default'; 
         }
     }
 
@@ -176,128 +176,123 @@ export class Game {
         this.renderer.render(
             this.gridController.grid,
             this.cameraOffsetX, this.cameraOffsetY,
-            this.selectedTileCoords,
-            this.hoveredTile,
+            null, 
+            (this.currentMode === 'build' && this.currentViewMode === 'default' && this.currentBuildType) ? this.hoveredTile : null,
             this.currentBuildType,
             this.currentViewMode
         );
     }
     
     public updateAllUI(taxes: number = 0, costs: number = 0, net: number = 0): void {
-        // totalPopulation is now a direct member of Game, updated by sim controller
         this.mainInfoPanel.updateDisplay(
             this.gameDay, this.playerBudget, this.totalPopulation,
             this.employmentRate, this.citySatisfaction,
             taxes, costs, net
         );
-        if (this.selectedTileCoords) {
-            this.updateTileInfoPaneContents(this.selectedTileCoords.x, this.selectedTileCoords.y);
-        }
-    }
-
-    private updateTileInfoPaneContents(gridX: number, gridY: number): void {
-        const tile = this.gridController.getTile(gridX, gridY);
-        if (!tile) {
-            this.tileInfoPane.hide();
-            this.selectedTileCoords = null;
-            return;
-        }
-        this.tileInfoPane.update(tile, {x: gridX, y: gridY});
-        this.tileInfoPane.show();
-        this.selectedTileCoords = { x: gridX, y: gridY }; // Ensure this is set
-        this.drawGame(); 
     }
     
-    public handleSelectInteraction(coords: Coordinates | null): void {
-        if (coords) {
-            this.updateTileInfoPaneContents(coords.x, coords.y);
-        } else {
-            this.tileInfoPane.hide();
-            this.selectedTileCoords = null;
+    // Renamed from updateHoveredTile to make its purpose clearer: updating display based on hover
+    public updateHoveredTileDisplay(coords: Coordinates | null): void {
+        // Build Preview Redraw Check (if coords or preview status changed)
+        // This part only determines if the *canvas* needs a redraw due to build preview.
+        let needsCanvasRedrawForBuildPreview = false;
+        const oldHoveredTileForPreview = this.hoveredTile; // Store what the game *thinks* is hovered before updating it
+        const shouldShowBuildPreviewNow = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
+        
+        // If the hovered tile itself has changed OR if the status of whether a build preview should show has changed
+        if ((oldHoveredTileForPreview?.x !== coords?.x || oldHoveredTileForPreview?.y !== coords?.y) ||
+            (shouldShowBuildPreviewNow !== (this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType && !!oldHoveredTileForPreview))) {
+             if(shouldShowBuildPreviewNow || (this.currentMode === 'build' && this.currentBuildType && oldHoveredTileForPreview && !coords) ) { // if preview should show now, or was showing and mouse left
+                needsCanvasRedrawForBuildPreview = true;
+             }
+        }
+        this.hoveredTile = coords; // Officially update the game's hoveredTile state
+
+        // Tile Info Pane Logic: Show if in default view AND mouse is over grid.
+        if (this.currentViewMode === 'default') {
+            if (coords) { 
+                const tileData = this.gridController.getTile(coords.x, coords.y);
+                if (tileData) {
+                    this.tileInfoPane.update(tileData, coords);
+                    this.tileInfoPane.show(); 
+                } else {
+                    this.tileInfoPane.hide(); 
+                }
+            } else { 
+                this.tileInfoPane.hide(); 
+            }
+        } else { 
+            this.tileInfoPane.hide(); 
+        }
+        
+        if (needsCanvasRedrawForBuildPreview) { 
             this.drawGame();
         }
+    }
+    
+    // This method is called by InputController on mousemove
+    public handleMouseMoveHover(coords: Coordinates | null): void {
+        this.updateHoveredTileDisplay(coords);
     }
 
-    public updateHoveredTile(coords: Coordinates | null): void {
-        let needsRedraw = false;
-        if (coords) {
-            if (!this.hoveredTile || this.hoveredTile.x !== coords.x || this.hoveredTile.y !== coords.y) {
-                this.hoveredTile = coords;
-                needsRedraw = true;
-            }
-        } else {
-            if (this.hoveredTile) {
-                this.hoveredTile = null;
-                needsRedraw = true;
-            }
-        }
-        if (needsRedraw) {
-            this.drawGame();
-        }
-    }
 
     public handleCanvasBuildInteraction(gridX: number, gridY: number): boolean {
-        if (this.currentMode !== 'build' || !this.currentBuildType) return false;
+        if (this.currentMode !== 'build' || !this.currentBuildType) {
+            return false;
+        }
         
         const tileData = this.gridController.getTile(gridX, gridY);
         if (!tileData) return false;
 
-        const selectedTool = this.currentBuildType;
+        const selectedTool = this.currentBuildType; 
         const oldTileType = tileData.type;
 
-        if (tileData.type.isObstacle && selectedTool.id !== tileData.type.id) {
+        if (tileData.type.isObstacle && selectedTool.id !== TILE_TYPES.GRASS.id) {
             this.messageBox.show("Cannot build on mountains.", 2000);
             return false;
         }
-        if (selectedTool.id === 'grass' && tileData.type.isObstacle) {
+        if (selectedTool.id === TILE_TYPES.GRASS.id && tileData.type.isObstacle) {
             this.messageBox.show("Mountains cannot be removed.", 2000);
             return false;
         }
-        // Prevent building zones/roads on water/mountains directly, unless it's water itself or grass for clearing
-        if ((tileData.type.id === 'water' || tileData.type.isObstacle) && 
-            !(selectedTool.id === 'water' || selectedTool.id === 'grass')) {
+        
+        if (tileData.type.id === TILE_TYPES.WATER.id && 
+            !(selectedTool.id === TILE_TYPES.WATER.id || selectedTool.id === TILE_TYPES.GRASS.id)) {
             this.messageBox.show(`Cannot build ${selectedTool.name} on ${tileData.type.name}.`, 2500);
             return false;
         }
 
 
-        if (selectedTool.id === 'grass') { // Bulldozing
-            if (tileData.type.id !== 'grass') {
-                // Calculate refund? Micropolis gives back some money. For now, no refund.
-                const costToClear = 5; // Small cost to bulldoze
-                if (this.playerBudget < costToClear && oldTileType.id !== TILE_TYPES.ROAD.id) { // Free to bulldoze roads
-                     this.messageBox.show(`Not enough funds to bulldoze. Cost: $${costToClear}`, 2000);
+        if (selectedTool.id === TILE_TYPES.GRASS.id) { 
+            if (tileData.type.id !== TILE_TYPES.GRASS.id) { 
+                if (this.playerBudget < C.BULLDOZE_COST && oldTileType.id !== TILE_TYPES.ROAD.id) { 
+                     this.messageBox.show(`Not enough funds to bulldoze. Cost: $${C.BULLDOZE_COST}`, 2000);
                      return false;
                 }
-                if (oldTileType.id !== TILE_TYPES.ROAD.id) this.playerBudget -= costToClear;
-
+                if (oldTileType.id !== TILE_TYPES.ROAD.id) { 
+                    this.playerBudget -= C.BULLDOZE_COST;
+                }
 
                 this.messageBox.show(`Cleared ${tileData.type.name}.`, 1500);
-                this.gridController.clearTileData(gridX, gridY); // Resets pop, pollution etc.
+                this.gridController.clearTileData(gridX, gridY); 
                 this.gridController.setTileType(gridX, gridY, TILE_TYPES.GRASS);
-
-                // If a road was destroyed, or a building, simulation needs to react
-                // The general simulation tick will handle most knock-on effects.
-                // Explicitly trigger UI update if that's not happening fast enough.
-                // this.simulationController.processGameTick(); // Optionally run a quick update
-                this.updateAllUI(); // Update budget display immediately
+                
+                this.updateAllUI(); 
                 this.drawGame();
                 return true;
             }
             return false; 
         }
 
-        // Building something else
-        // Allow building on grass, or replacing existing non-obstacle tiles if it's not the same type
-        if (tileData.type.id === 'grass' || (tileData.type.id !== selectedTool.id && !tileData.type.isObstacle)) { 
+        if (tileData.type.id === TILE_TYPES.GRASS.id || 
+            (!tileData.type.isObstacle && tileData.type.id !== selectedTool.id)) { 
+            
             if (this.playerBudget >= selectedTool.cost) {
-                let messageAction = tileData.type.id === 'grass' ? "Built" : "Replaced";
+                let messageAction = tileData.type.id === TILE_TYPES.GRASS.id ? "Built" : "Replaced";
                 let oldTypeName = tileData.type.name;
 
                 this.playerBudget -= selectedTool.cost;
                 
-                // Preserve some data if it's just a zone being replaced by another zone?
-                // For now, clearTileData resets everything before setting new type.
                 if (messageAction === "Replaced") {
                      this.gridController.clearTileData(gridX, gridY);
                 }
@@ -305,8 +300,7 @@ export class Game {
                 
                 this.messageBox.show(`${messageAction} ${oldTypeName && messageAction === "Replaced" ? oldTypeName : ""} with ${selectedTool.name} for $${selectedTool.cost}`.replace("  ", " "), 2500);
                 
-                // No need for immediate sim recalculation here as the main game tick will pick it up.
-                this.updateAllUI(); // Update budget display
+                this.updateAllUI(); 
                 this.drawGame();
                 return true;
             } else {
@@ -315,8 +309,8 @@ export class Game {
             }
         }
         
-        if (tileData.type.id === selectedTool.id && selectedTool.id !== 'grass') {
-            this.messageBox.show(`This is already a ${tileData.type.name}.`, 1500);
+        if (tileData.type.id === selectedTool.id && selectedTool.id !== TILE_TYPES.GRASS.id) {
+            // this.messageBox.show(`This is already a ${tileData.type.name}.`, 1500); 
         }
         return false;
     }
@@ -331,6 +325,6 @@ export class Game {
         this.gameDay++;
         const economyUpdate = this.simulationController.processGameTick();
         this.updateAllUI(economyUpdate.taxes, economyUpdate.costs, economyUpdate.net); 
-        this.drawGame(); // Redraw to show any visual changes from simulation (e.g. heatmaps if active)
+        this.drawGame(); 
     }
 }

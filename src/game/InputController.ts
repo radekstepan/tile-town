@@ -32,17 +32,21 @@ export class InputController {
             if (this.gameInstance.currentMode === 'pan') {
                 this.gameInstance.isDragging = true;
                 this.gameInstance.setCanvasCursor(); 
-            } else if (this.gameInstance.currentMode === 'select') {
-                this.gameInstance.handleSelectInteraction(targetCoords);
-            } else if (this.gameInstance.currentMode === 'build') {
-                const buildCoords = this.gameInstance.hoveredTile ? this.gameInstance.hoveredTile : targetCoords;
-                if (buildCoords) {
-                    const built = this.gameInstance.handleCanvasBuildInteraction(buildCoords.x, buildCoords.y);
-                    if (built) {
-                        this.gameInstance.lastBuiltTileDuringDrag = { x: buildCoords.x, y: buildCoords.y };
+            // Removed 'select' mode logic
+            } else if (this.gameInstance.currentMode === 'build') { // Includes "inspect" state (build mode, no tool)
+                // If a build tool is active, attempt to build
+                if (this.gameInstance.currentBuildType) {
+                    const buildCoords = this.gameInstance.hoveredTile ? this.gameInstance.hoveredTile : targetCoords;
+                    if (buildCoords) {
+                        const built = this.gameInstance.handleCanvasBuildInteraction(buildCoords.x, buildCoords.y);
+                        if (built) {
+                            this.gameInstance.lastBuiltTileDuringDrag = { x: buildCoords.x, y: buildCoords.y };
+                        }
                     }
+                    this.gameInstance.isDragging = true; // Enable painting for build tools
+                } else {
+                    // If in build mode but no tool selected (inspect mode), click does nothing on grid
                 }
-                this.gameInstance.isDragging = true; // Enable painting
             }
         } else if (event.button === 1) { // Middle mouse for panning
             this.gameInstance.isDragging = true; 
@@ -56,9 +60,14 @@ export class InputController {
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
+        const currentMouseTile = getTileCoordinatesFromScreenPoint(mouseX, mouseY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
+
+        // Pass hover coordinates to Game instance to handle info pane and build preview logic
+        this.gameInstance.handleMouseMoveHover(currentMouseTile);
+
 
         if (this.gameInstance.isDragging) {
-            if (this.gameInstance.currentMode === 'pan' || event.buttons === 4) { // Pan if in pan mode OR middle mouse button is held
+            if (this.gameInstance.currentMode === 'pan' || event.buttons === 4) { 
                 const dx = event.clientX - this.gameInstance.lastMouseX;
                 const dy = event.clientY - this.gameInstance.lastMouseY;
                 this.gameInstance.cameraOffsetX += dx;
@@ -66,7 +75,6 @@ export class InputController {
                 this.gameInstance.drawGame();
             } else if (this.gameInstance.currentMode === 'build' && this.gameInstance.currentBuildType) {
                 // Paint-build logic
-                const currentMouseTile = getTileCoordinatesFromScreenPoint(mouseX, mouseY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
                 if (currentMouseTile) {
                     if (!this.gameInstance.lastBuiltTileDuringDrag || 
                         currentMouseTile.x !== this.gameInstance.lastBuiltTileDuringDrag.x || 
@@ -81,16 +89,6 @@ export class InputController {
             }
         }
         
-        // Update hovered tile for visual feedback regardless of dragging state in build mode
-        if (this.gameInstance.currentMode === 'build' && this.gameInstance.currentBuildType) {
-            const currentMouseTile = getTileCoordinatesFromScreenPoint(mouseX, mouseY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
-            this.gameInstance.updateHoveredTile(currentMouseTile);
-        } else if (!this.gameInstance.isDragging) { // Clear hover if not dragging and not in build mode
-             if (this.gameInstance.hoveredTile) { 
-                this.gameInstance.updateHoveredTile(null);
-            }
-        }
-        
         this.gameInstance.lastMouseX = event.clientX;
         this.gameInstance.lastMouseY = event.clientY;
     }
@@ -98,7 +96,7 @@ export class InputController {
     private handleMouseUp(event: MouseEvent): void {
         if (this.gameInstance.isDragging) {
             if (this.gameInstance.currentMode === 'build') {
-                this.gameInstance.lastBuiltTileDuringDrag = null; // Reset for next paint action
+                this.gameInstance.lastBuiltTileDuringDrag = null; 
             }
             this.gameInstance.isDragging = false;
             this.gameInstance.setCanvasCursor(); 
@@ -106,15 +104,15 @@ export class InputController {
     }
 
     private handleMouseLeave(): void {
+        // When mouse leaves canvas, clear hover related states in Game instance
+        this.gameInstance.handleMouseMoveHover(null);
+
         if (this.gameInstance.isDragging) {
              if (this.gameInstance.currentMode === 'build') {
                 this.gameInstance.lastBuiltTileDuringDrag = null;
             }
             this.gameInstance.isDragging = false;
             this.gameInstance.setCanvasCursor();
-        }
-        if (this.gameInstance.hoveredTile) {
-            this.gameInstance.updateHoveredTile(null);
         }
     }
     
@@ -126,24 +124,28 @@ export class InputController {
             const touchX = touch.clientX - rect.left;
             const touchY = touch.clientY - rect.top;
             const targetCoords = getTileCoordinatesFromScreenPoint(touchX, touchY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
+            
+            // Update hover display for touch start as well
+            this.gameInstance.handleMouseMoveHover(targetCoords);
+
 
             if (this.gameInstance.currentMode === 'pan') {
                 this.gameInstance.isDragging = true;
-            } else if (this.gameInstance.currentMode === 'select') {
-                this.gameInstance.handleSelectInteraction(targetCoords);
             } else if (this.gameInstance.currentMode === 'build') {
-                if (targetCoords) {
+                if (this.gameInstance.currentBuildType && targetCoords) { // Only build if tool is selected
                     const built = this.gameInstance.handleCanvasBuildInteraction(targetCoords.x, targetCoords.y);
                     if (built) {
                         this.gameInstance.lastBuiltTileDuringDrag = { x: targetCoords.x, y: targetCoords.y };
                     }
                 }
-                this.gameInstance.isDragging = true; // Enable painting for touch
+                // Allow dragging for painting only if a tool is selected
+                if (this.gameInstance.currentBuildType) {
+                    this.gameInstance.isDragging = true; 
+                }
             }
             this.gameInstance.lastTouchX = touch.clientX;
             this.gameInstance.lastTouchY = touch.clientY;
         } else if (event.touches.length > 1) {
-            // Stop painting/panning if multi-touch (could be pinch-zoom later)
             if (this.gameInstance.isDragging) {
                 if (this.gameInstance.currentMode === 'build') {
                     this.gameInstance.lastBuiltTileDuringDrag = null;
@@ -157,9 +159,13 @@ export class InputController {
         if (this.gameInstance.isDragging && event.touches.length === 1) {
             event.preventDefault();
             const touch = event.touches[0];
-            const rect = this.canvas.getBoundingClientRect(); // Recalculate rect in case of scroll/resize
+            const rect = this.canvas.getBoundingClientRect(); 
             const touchX = touch.clientX - rect.left;
             const touchY = touch.clientY - rect.top;
+            const currentTouchTile = getTileCoordinatesFromScreenPoint(touchX, touchY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
+
+            // Update hover display during touch move
+            this.gameInstance.handleMouseMoveHover(currentTouchTile);
 
             if (this.gameInstance.currentMode === 'pan') {
                 if (this.gameInstance.lastTouchX !== null && this.gameInstance.lastTouchY !== null) {
@@ -170,7 +176,6 @@ export class InputController {
                     this.gameInstance.drawGame();
                 }
             } else if (this.gameInstance.currentMode === 'build' && this.gameInstance.currentBuildType) {
-                const currentTouchTile = getTileCoordinatesFromScreenPoint(touchX, touchY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
                 if (currentTouchTile) {
                     if (!this.gameInstance.lastBuiltTileDuringDrag || 
                         currentTouchTile.x !== this.gameInstance.lastBuiltTileDuringDrag.x || 
@@ -181,7 +186,6 @@ export class InputController {
                             this.gameInstance.lastBuiltTileDuringDrag = { x: currentTouchTile.x, y: currentTouchTile.y };
                         }
                     }
-                    this.gameInstance.updateHoveredTile(currentTouchTile); // Show hover preview for touch drag too
                 }
             }
             this.gameInstance.lastTouchX = touch.clientX;
@@ -190,23 +194,20 @@ export class InputController {
     }
 
     private handleTouchEnd(event: TouchEvent): void { 
-        // Check touches.length because another finger might still be down for multi-touch gestures
+        // Clear hover display on touch end if no touches remain
+        if (event.touches.length === 0) {
+            this.gameInstance.handleMouseMoveHover(null);
+        }
+
         if (event.touches.length === 0 && this.gameInstance.isDragging) {
             if (this.gameInstance.currentMode === 'build') {
                 this.gameInstance.lastBuiltTileDuringDrag = null;
             }
             this.gameInstance.isDragging = false;
         }
-        // Reset last touch position if no fingers are down, or if the specific dragging finger was lifted.
-        // Simpler to reset if isDragging becomes false.
         if (!this.gameInstance.isDragging) {
             this.gameInstance.lastTouchX = null;
             this.gameInstance.lastTouchY = null;
-        }
-        if (this.gameInstance.hoveredTile && this.gameInstance.currentMode === 'build'){
-             // Keep hover for a moment if lifting finger from a build drag, or clear it.
-             // For now, let's clear it, mouse equivalent is mouseleave.
-            // this.gameInstance.updateHoveredTile(null);
         }
     }
 }

@@ -114,8 +114,7 @@ export class SimulationController {
                 }
                 if (neighborCount > 0) {
                     const avgNeighborPollution = neighborPollutionSum / neighborCount;
-                    // Move some pollution towards equilibrium with neighbors
-                    const currentPollution = tempPollutionMap[x][y];
+                    const currentPollution = tempPollutionMap[y][x]; // Corrected from tempPollutionMap[x][y]
                     newPollutionMap[y][x] = (currentPollution * (1 - C.POLLUTION_SPREAD_FACTOR)) + (avgNeighborPollution * C.POLLUTION_SPREAD_FACTOR);
                 }
                  // Clamp pollution
@@ -254,6 +253,23 @@ export class SimulationController {
         return totalPop;
     }
     
+    private updateStruggleVisuals(tile: GridTile, isCurrentlyStruggling: boolean): void {
+        if (isCurrentlyStruggling) {
+            tile.struggleTicks = (tile.struggleTicks || 0) + 1;
+        } else {
+            tile.struggleTicks = 0;
+            // Only turn off visual if it was on and state improved
+            if (tile.isVisuallyStruggling) tile.isVisuallyStruggling = false;
+        }
+
+        if (tile.struggleTicks >= C.STRUGGLE_VISUAL_THRESHOLD_TICKS) {
+            if (!tile.isVisuallyStruggling) tile.isVisuallyStruggling = true; // Set to true if newly struggling
+        } else if (!isCurrentlyStruggling && tile.isVisuallyStruggling) {
+            // If state improved AND it was visually struggling, turn it off
+            tile.isVisuallyStruggling = false;
+        }
+    }
+    
     private processResidentialGrowth(tile: GridTile, x: number, y: number): void {
         const desirability = tile.tileValue; // From tileValueMap via tile.tileValue cache
         let shouldGrow = false;
@@ -270,7 +286,7 @@ export class SimulationController {
             if (tile.type.isDevelopableZone && !tile.type.level) { // Is an empty zone plot
                  if (growthFactor > C.R_GROWTH_THRESHOLD / 2 && desirability > C.R_MIN_DESIRABILITY_FOR_GROWTH / 2 && tile.type.developsInto) { // Lower threshold to develop L1
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
-                    tile.population = TILE_TYPES[tile.type.developsInto].populationCapacity ? Math.floor(TILE_TYPES[tile.type.developsInto].populationCapacity! / 4) : 2; // Initial pop for L1
+                    // Population for new L1 is set in changeTileLevel
                     return; // Done for this tick
                 }
             } else if (tile.type.level && tile.type.level > 0) { // Is an existing building
@@ -297,14 +313,21 @@ export class SimulationController {
                 tile.population = 0;
                 if (tile.type.revertsTo && TILE_TYPES[tile.type.revertsTo]) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.revertsTo]);
-                    if (tile.type.isDevelopableZone && !tile.type.level) tile.population = 0; // Reset pop if reverted to empty zone
                 } else {
                     // Could become rubble or just stay L1 empty
                 }
             }
         }
         if (tile.population < 0) tile.population = 0;
+        if (tile.type.populationCapacity && tile.population > tile.type.populationCapacity) tile.population = tile.type.populationCapacity;
 
+
+        // Update visual struggle state for Residential
+        let isResStruggling = false;
+        if (tile.type.level && tile.type.level > 0 && tile.tileValue < C.R_VISUAL_STRUGGLE_TILE_VALUE_THRESHOLD) {
+            isResStruggling = true;
+        }
+        this.updateStruggleVisuals(tile, isResStruggling);
     }
 
     private processCommercialGrowth(tile: GridTile, x: number, y: number): void {
@@ -323,7 +346,6 @@ export class SimulationController {
             if (tile.type.isDevelopableZone && !tile.type.level) {
                  if (growthFactor > C.C_GROWTH_THRESHOLD / 2 && desirability > C.C_MIN_DESIRABILITY_FOR_GROWTH / 2 && tile.type.developsInto) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
-                    tile.population = TILE_TYPES[tile.type.developsInto].populationCapacity ? Math.floor(TILE_TYPES[tile.type.developsInto].populationCapacity! / 4) : 1;
                     return;
                 }
             } else if (tile.type.level && tile.type.level > 0) {
@@ -350,11 +372,20 @@ export class SimulationController {
                 tile.population = 0;
                 if (tile.type.revertsTo && TILE_TYPES[tile.type.revertsTo]) {
                      this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.revertsTo]);
-                     if (tile.type.isDevelopableZone && !tile.type.level) tile.population = 0;
                 }
             }
         }
         if (tile.population < 0) tile.population = 0;
+        if (tile.type.populationCapacity && tile.population > tile.type.populationCapacity) tile.population = tile.type.populationCapacity;
+
+
+        // Update visual struggle state for Commercial
+        let isComStruggling = false;
+        if (tile.type.level && tile.type.level > 0 && tile.type.populationCapacity && tile.type.populationCapacity > 0 &&
+            (tile.population / tile.type.populationCapacity) < C.CI_VISUAL_STRUGGLE_POPULATION_RATIO_THRESHOLD) {
+            isComStruggling = true;
+        }
+        this.updateStruggleVisuals(tile, isComStruggling);
     }
 
     private processIndustrialGrowth(tile: GridTile, x: number, y: number): void {
@@ -374,7 +405,6 @@ export class SimulationController {
             if (tile.type.isDevelopableZone && !tile.type.level) {
                  if (growthFactor > C.I_GROWTH_THRESHOLD / 2 && desirability > C.I_MIN_DESIRABILITY_FOR_GROWTH / 2 && tile.type.developsInto) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
-                    tile.population = TILE_TYPES[tile.type.developsInto].populationCapacity ? Math.floor(TILE_TYPES[tile.type.developsInto].populationCapacity! / 4) : 2;
                     return;
                 }
             } else if (tile.type.level && tile.type.level > 0) {
@@ -402,39 +432,60 @@ export class SimulationController {
                 tile.population = 0;
                 if (tile.type.revertsTo && TILE_TYPES[tile.type.revertsTo]) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.revertsTo]);
-                    if (tile.type.isDevelopableZone && !tile.type.level) tile.population = 0;
                 }
             }
         }
         if (tile.population < 0) tile.population = 0;
+        if (tile.type.populationCapacity && tile.population > tile.type.populationCapacity) tile.population = tile.type.populationCapacity;
+
+        // Update visual struggle state for Industrial
+        let isIndStruggling = false;
+        if (tile.type.level && tile.type.level > 0 && tile.type.populationCapacity && tile.type.populationCapacity > 0 &&
+            (tile.population / tile.type.populationCapacity) < C.CI_VISUAL_STRUGGLE_POPULATION_RATIO_THRESHOLD) {
+            isIndStruggling = true;
+        }
+        this.updateStruggleVisuals(tile, isIndStruggling);
     }
     
     private changeTileLevel(tile: GridTile, x: number, y: number, newType: TileType): void {
         if (tile.type.id === newType.id) return; // No change
 
-        // console.log(`Changing tile (${x},${y}) from ${tile.type.id} to ${newType.id}`);
-        this.gridController.setTileType(x, y, newType); // This resets some tile data by default
+        const oldType = tile.type;
+        this.gridController.setTileType(x, y, newType); 
         
-        // Re-fetch the tile as setTileType creates a new object or modifies it significantly
         const newGridTileState = this.gridController.getTile(x,y)!; 
         
-        // Preserve/initialize important data after type change
-        newGridTileState.pollution = tile.pollution; // Pollution stays
-        newGridTileState.tileValue = tile.tileValue; // Tile value stays for now, may get re-evaluated
-        newGridTileState.hasRoadAccess = tile.hasRoadAccess; // Road access stays
+        newGridTileState.pollution = tile.pollution; 
+        newGridTileState.tileValue = tile.tileValue; 
+        newGridTileState.hasRoadAccess = tile.hasRoadAccess; 
+        newGridTileState.isVisuallyStruggling = false; 
+        newGridTileState.struggleTicks = 0;
         
-        if (newType.isDevelopableZone && !newType.level) { // Reverted to empty zone
+        if (newType.isDevelopableZone && !newType.level) { 
             newGridTileState.population = 0;
-        } else if (tile.population > 0 && newType.level && tile.type.level && newType.level < tile.type.level) { // Downgrade with some population
+        } else if (newType.level && oldType.level && newType.level < oldType.level) { // Downgrade
+            // Keep some population, capped by new capacity
             newGridTileState.population = newType.populationCapacity ? Math.min(tile.population, newType.populationCapacity) : Math.floor(tile.population / 2);
-        } else if (newType.level && newType.level > (tile.type.level || 0)) { // Upgrade, set starting population for new level
-             newGridTileState.population = newType.populationCapacity ? Math.floor(newType.populationCapacity / 4) : tile.population; // Carry some pop over or start fresh
-        } else {
-            newGridTileState.population = tile.population; // Default carry over
+        } else if (newType.level && newType.level > (oldType.level || 0)) { // Upgrade or first build
+            // Set initial population for new level, or carry over if already populated from a zone plot
+            let initialPop = tile.population > 0 ? tile.population : 0; // Carry from zone plot if it had some conceptual pop
+            if (newType.populationCapacity) {
+                 initialPop = Math.max(initialPop, Math.floor(newType.populationCapacity / 4)); // Ensure at least some starting pop
+                 newGridTileState.population = Math.min(initialPop, newType.populationCapacity);
+            } else {
+                newGridTileState.population = initialPop > 0 ? initialPop : (newType.zoneCategory === 'residential' ? 2 : 1) ; // Default small pop if no capacity defined
+            }
+        } else { // Other cases, like replacing a L1 with another L1 of different type (if allowed)
+            newGridTileState.population = tile.population; 
         }
-        if (newGridTileState.population < 0) newGridTileState.population = 0;
 
-        this.gameInstance.drawGame(); // Visual update
+        if (newGridTileState.population < 0) newGridTileState.population = 0;
+        if (newGridTileState.type.populationCapacity && newGridTileState.population > newGridTileState.type.populationCapacity) {
+            newGridTileState.population = newGridTileState.type.populationCapacity;
+        }
+
+
+        this.gameInstance.drawGame(); 
     }
 
 
@@ -449,17 +500,35 @@ export class SimulationController {
                 const tile = this.gridController.getTile(x,y);
                 if (tile) {
                     totalCarryCosts += (tile.type.carryCost || 0);
+                    let taxFromTile = 0;
                     if (tile.type.taxRatePerPopulation && tile.population > 0) {
-                        totalTaxes += tile.population * tile.type.taxRatePerPopulation;
+                        taxFromTile = tile.population * tile.type.taxRatePerPopulation;
                     } else if (tile.type.baseTax) {
-                        totalTaxes += tile.type.baseTax;
+                        taxFromTile = tile.type.baseTax;
                     }
+
+                    // Apply tax modifiers
+                    if (tile.type.zoneCategory === 'residential' && taxFromTile > 0) {
+                        if (tile.tileValue < C.R_TAX_DESIRABILITY_THRESHOLD_SEVERE) taxFromTile *= 0.05; 
+                        else if (tile.tileValue < C.R_TAX_DESIRABILITY_THRESHOLD_LOW) taxFromTile *= 0.3; 
+                    } else if ((tile.type.zoneCategory === 'commercial' || tile.type.zoneCategory === 'industrial') && taxFromTile > 0 && tile.type.populationCapacity && tile.type.populationCapacity > 0) {
+                        const popRatio = tile.population / tile.type.populationCapacity;
+                        if (popRatio < C.CI_TAX_POPULATION_RATIO_SEVERE) taxFromTile *= 0.05; 
+                        else if (popRatio < C.CI_TAX_POPULATION_RATIO_LOW) taxFromTile *= 0.3; 
+                    }
+                    
+                    if (tile.isVisuallyStruggling && taxFromTile > 0) {
+                        taxFromTile *= C.STRUGGLING_TAX_MULTIPLIER; 
+                    }
+                    totalTaxes += taxFromTile;
 
                     if (tile.type.zoneCategory === 'residential') {
                         totalPopulation += tile.population;
                     }
-                    if (tile.type.jobsProvided) { // Assuming jobsProvided is per building, not per pop unit for C/I
-                        totalJobsAvailable += tile.type.jobsProvided;
+                    // Jobs provided calculation now directly uses tile.type.jobsProvided (if defined)
+                    // This assumes jobsProvided on TileType is the total for that building type/level
+                    if (tile.type.jobsProvided && tile.type.level && tile.type.level > 0) {
+                         totalJobsAvailable += tile.type.jobsProvided;
                     }
                 }
             }
@@ -471,7 +540,6 @@ export class SimulationController {
         const employedWorkforce = Math.min(totalJobsAvailable, totalPopulation);
         this.gameInstance.employmentRate = (totalPopulation > 0) ? (employedWorkforce / totalPopulation) * 100 : 100;
 
-        // Calculate average city satisfaction (e.g., average tile value of residential zones)
         let residentialTileValueSum = 0;
         let residentialTileCount = 0;
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
@@ -489,7 +557,6 @@ export class SimulationController {
         return { taxes: totalTaxes, costs: totalCarryCosts, net: netChange };
     }
 
-    // Exposed for potential use by UI or other systems
     public getPollutionAt(x: number, y: number): number {
         if (this.pollutionMap[y]) return this.pollutionMap[y][x] || 0;
         return 0;
@@ -498,12 +565,4 @@ export class SimulationController {
         if (this.tileValueMap[y]) return this.tileValueMap[y][x] || 0;
         return 0;
     }
-
-    // --- Old methods to be removed or integrated ---
-    // calculateCityMetrics - largely replaced by calculateFinancesAndGlobalMetrics and direct updates
-    // calculateTileSatisfaction, updateResidentialBuildingVisual - replaced by RCI growth logic
-    // calculateCIOperationalScore, updateCIOperationalVisual - replaced by RCI growth logic
-    // isConnectedToRoad - replaced by checkDirectRoadAccess and tile.hasRoadAccess
-    // checkAndUpdateAdjacentBuildingsOnRoadChange - aspects covered by road access checks in growth logic
-    // attemptZoneDevelopment - growth from zone to L1 is now part of RCI growth logic directly
 }

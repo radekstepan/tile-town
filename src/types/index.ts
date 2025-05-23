@@ -50,6 +50,9 @@ export interface GridTile {
   pollution: number; // Pollution level at this tile
   hasRoadAccess: boolean;
 
+  isVisuallyStruggling?: boolean;
+  struggleTicks?: number;
+
   developmentTimerId?: number; // Retaining for potential timed events, though primary growth is tick-based
 }
 
@@ -58,5 +61,5 @@ export interface Coordinates {
   y: number;
 }
 
-export type GameMode = 'pan' | 'select' | 'build';
+export type GameMode = 'pan' | 'build'; // Removed 'select'
 export type ViewMode = 'default' | 'tile_value_heatmap' | 'pollution_heatmap'; // Updated view modes

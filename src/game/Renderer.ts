@@ -17,16 +17,15 @@ export class Renderer {
 
     private getHeatmapColor(value: number, maxValue: number, type: 'positive' | 'negative'): string | null {
         if (value < 0 && type === 'positive') return null; // No negative values for positive heatmaps like tile value
-        if (value <= 0 && type === 'negative') return null; // No positive values for negative heatmaps like pollution
+        if (value <= 0 && type === 'negative') return null; // No positive or zero values for negative heatmaps like pollution
 
         const normalizedValue = Math.min(Math.abs(value) / maxValue, 1);
         const alpha = 0.4 + normalizedValue * 0.3; // Vary alpha slightly with intensity
 
-        if (type === 'positive') { // For Tile Value (Green=Good, Yellow=Mid, Red=Bad concept needs adjustment)
-                                   // Let's do: Red (low value) -> Yellow (mid) -> Green (high value)
+        if (type === 'positive') { // For Tile Value: Red (low value) -> Yellow (mid) -> Green (high value)
             if (normalizedValue < 0.33) return `rgba(255, ${Math.floor(normalizedValue*3 * 255)}, 0, ${alpha})`; // Red to Yellow
             else if (normalizedValue < 0.66) return `rgba(${Math.floor(255 - (normalizedValue-0.33)*3 * 255)}, 255, 0, ${alpha})`; // Yellow to Green
-            else return `rgba(0, 255, ${Math.floor((normalizedValue-0.66)*3 * 255/2)}, ${alpha})`; // Green (slightly bluish high green)
+            else return `rgba(0, 255, ${Math.floor((normalizedValue-0.66)*3 * 128)}, ${alpha})`; // Green to Bright Green (slight blue tint for very high)
 
         } else { // For Pollution (Green=Low, Yellow=Mid, Red=High)
             const r = Math.floor(255 * normalizedValue);
@@ -36,10 +35,11 @@ export class Renderer {
     }
 
     private drawTileObject(
-        gridX: number, gridY: number, tileType: TileType,
+        gridX: number, gridY: number, tileData: GridTile, // Changed to take full GridTile
         cameraOffsetX: number, cameraOffsetY: number,
         customAlpha: number = 1.0, isSelected: boolean = false
     ): void {
+        const tileType = tileData.type; // Extract TileType from GridTile
         const screenX = cameraOffsetX + (gridX - gridY) * C.TILE_HALF_WIDTH_ISO;
         const screenY = cameraOffsetY + (gridX + gridY) * C.TILE_HALF_HEIGHT_ISO;
         
@@ -54,7 +54,7 @@ export class Renderer {
         this.ctx.lineTo(-C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
         this.ctx.closePath();
         
-        this.ctx.fillStyle = tileType.color;
+        this.ctx.fillStyle = tileType.color; // Base tile color is always standard
         this.ctx.fill();
 
         if (isSelected) {
@@ -69,11 +69,23 @@ export class Renderer {
         this.ctx.stroke(); 
 
         if (tileType.renderHeight && tileType.renderHeight > 0) {
-            const buildingVisualHeight = tileType.renderHeight * C.TILE_DEPTH_UNIT;
-            const topColor = lightenColor(tileType.color, 15);
-            const sideColorDark = darkenColor(tileType.color, 15); 
-            const sideColorLight = darkenColor(tileType.color, 5);  
+            const isStruggling = tileData.isVisuallyStruggling === true;
+            let buildingColor = tileType.color; // Start with the original tile type color for the building
 
+            if (isStruggling) {
+                // For struggling buildings, significantly darken their 3D parts
+                // The base tile (ground part) keeps its original color
+                buildingColor = darkenColor(tileType.color, 35); // Make it quite dark
+            }
+
+            const buildingVisualHeight = tileType.renderHeight * C.TILE_DEPTH_UNIT;
+            const topColor = lightenColor(buildingColor, 15);
+            const sideColorDark = darkenColor(buildingColor, 15); 
+            const sideColorLight = darkenColor(buildingColor, 5);  
+
+            // Line width is already set (either for selected or non-selected state from above).
+
+            // --- Right Side ---
             this.ctx.fillStyle = sideColorDark;
             this.ctx.beginPath();
             this.ctx.moveTo(C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -87,6 +99,7 @@ export class Renderer {
             }
             this.ctx.stroke(); 
 
+            // --- Left Side ---
             this.ctx.fillStyle = sideColorLight;
             this.ctx.beginPath();
             this.ctx.moveTo(-C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -100,6 +113,7 @@ export class Renderer {
             }
             this.ctx.stroke(); 
             
+            // --- Top Face ---
             this.ctx.fillStyle = topColor;
             this.ctx.beginPath();
             this.ctx.moveTo(0, -buildingVisualHeight);
@@ -130,7 +144,7 @@ export class Renderer {
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
                 const isSelected = selectedTileCoords?.x === x && selectedTileCoords?.y === y;
-                this.drawTileObject(x, y, gridData[y][x].type, cameraOffsetX, cameraOffsetY, 1.0, isSelected);
+                this.drawTileObject(x, y, gridData[y][x], cameraOffsetX, cameraOffsetY, 1.0, isSelected); // Pass full GridTile
             }
         }
 
@@ -172,7 +186,18 @@ export class Renderer {
         }
         
         if (currentBuildType && hoveredTile && currentViewMode === 'default') {
-            this.drawTileObject(hoveredTile.x, hoveredTile.y, currentBuildType, cameraOffsetX, cameraOffsetY, 0.5); 
+            // For preview, create a temporary GridTile-like structure.
+            // Include default values for the new struggle-related fields.
+            const previewTileData: GridTile = {
+                type: currentBuildType,
+                population: 0,
+                tileValue: C.BASE_TILE_VALUE, // Use base for preview
+                pollution: 0,
+                hasRoadAccess: false, // Assume no road access for simple preview
+                isVisuallyStruggling: false,
+                struggleTicks: 0
+            };
+            this.drawTileObject(hoveredTile.x, hoveredTile.y, previewTileData, cameraOffsetX, cameraOffsetY, 0.5);
         }
     }
 }

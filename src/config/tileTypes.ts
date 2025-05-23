@@ -6,17 +6,17 @@ const createRCILevelProps = (level: number, category: 'residential' | 'commercia
     if (category === 'residential') {
         props.populationCapacity = level * 10; // e.g., L1: 10, L2: 20, L3: 30
         props.taxRatePerPopulation = 0.5 + level * 0.2; // e.g. L1: 0.7, L2: 0.9, L3: 1.1
-        props.carryCost = 2 + level;
+        props.carryCost = 2 + level * 1.5; // Increased carry cost scaling
     } else if (category === 'commercial') {
         props.jobsProvided = level * 5; // e.g., L1: 5, L2: 10, L3: 15
         props.taxRatePerPopulation = 0.8 + level * 0.3; // Commercial taxes based on its own "effective" population/size
         props.populationCapacity = level * 4; // "Size" for tax calculation
-        props.carryCost = 3 + level * 2;
+        props.carryCost = 3 + level * 2.5; // Increased carry cost scaling
     } else if (category === 'industrial') {
         props.jobsProvided = level * 8; // e.g., L1: 8, L2: 16, L3: 24
         props.taxRatePerPopulation = 0.4 + level * 0.1;
         props.populationCapacity = level * 6; // "Size" for tax calculation
-        props.carryCost = 4 + level * 1.5;
+        props.carryCost = 4 + level * 2; // Increased carry cost scaling
     }
     props.developsInto = level < 3 ? `${category.toUpperCase()}_L${level + 1}` : undefined;
     props.revertsTo = level > 1 ? `${category.toUpperCase()}_L${level - 1}` : `${category.toUpperCase()}_ZONE`;
@@ -25,8 +25,8 @@ const createRCILevelProps = (level: number, category: 'residential' | 'commercia
 };
 
 export const TILE_TYPES: TileTypeDefinition = {
-    GRASS: { id: 'grass', color: '#72a372', name: 'Grass', cost: 0, renderHeight: 0, carryCost: 0 },
-    ROAD: { id: 'road', color: '#4a5568', name: 'Road', cost: 10, renderHeight: 0.01, carryCost: 0.5 },
+    GRASS: { id: 'grass', color: '#72a372', name: 'Grass', cost: 0, renderHeight: 0, carryCost: 0 }, // Cost 0 for grass as a "tool"
+    ROAD: { id: 'road', color: '#4a5568', name: 'Road', cost: 10, renderHeight: 0.01, carryCost: 0.5 }, // Road carry cost can be tuned
     WATER: { id: 'water', color: '#63b3ed', name: 'Water', cost: 5, renderHeight: 0.02, carryCost: 0, isNature: true },
     PARK: { id: 'park', color: '#38a169', name: 'Park (Player)', cost: 25, renderHeight: 0.15, isNature: true, carryCost: 2 },
     NATURAL_PARK: { id: 'natural_park', color: '#2E7D32', name: 'Natural Park', cost: 0, renderHeight: 0.15, isNature: true, carryCost: 0 },

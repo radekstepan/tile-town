@@ -46,8 +46,15 @@ export class MainInfoPanel {
         this.gameDayDisplay.textContent = gameDay.toString();
         this.budgetDisplay.textContent = `$${budget.toFixed(0)}`;
         this.populationDisplay.textContent = population.toString();
-        this.employmentDisplay.textContent = `${employmentRate.toFixed(1)}%`;
-        this.satisfactionDisplay.textContent = `${citySatisfaction.toFixed(1)}%`;
+
+        if (population > 0) {
+            this.employmentDisplay.textContent = `${employmentRate.toFixed(1)}%`;
+            this.satisfactionDisplay.textContent = `${citySatisfaction.toFixed(1)}%`;
+        } else {
+            this.employmentDisplay.textContent = "-";
+            this.satisfactionDisplay.textContent = "-";
+        }
+
         this.taxesDisplay.textContent = `$${taxes.toFixed(1)}`;
         this.costsDisplay.textContent = `$${costs.toFixed(1)}`;
         this.netDisplay.textContent = `$${net.toFixed(1)}`;

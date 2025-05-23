@@ -55,8 +55,21 @@ export const I_MIN_WORKER_SCORE_FOR_NO_DECLINE = 20;
 export const I_GROWTH_POPULATION_RATE = 3; // Industry might grow faster in terms of "capacity"
 export const I_DECLINE_POPULATION_RATE = 2;
 
+// Tax Modifier Thresholds (lower value = lower tax) - Made stricter
+export const R_TAX_DESIRABILITY_THRESHOLD_SEVERE = 30; // Below this, Residential pays 5% tax
+export const R_TAX_DESIRABILITY_THRESHOLD_LOW = 50;    // Below this, Residential pays 30% tax
+export const CI_TAX_POPULATION_RATIO_SEVERE = 0.3; // If C/I pop is <30% capacity, pays 5% tax
+export const CI_TAX_POPULATION_RATIO_LOW = 0.6;    // If C/I pop is <60% capacity, pays 30% tax
+export const STRUGGLING_TAX_MULTIPLIER = 0.25; // Tax multiplier if visually struggling (was 0.5)
+
+// Visual Struggle Constants
+export const STRUGGLE_VISUAL_THRESHOLD_TICKS = 3; // Ticks in bad state to show visual
+export const R_VISUAL_STRUGGLE_TILE_VALUE_THRESHOLD = 25; // TileValue below this triggers struggle visual for Res
+export const CI_VISUAL_STRUGGLE_POPULATION_RATIO_THRESHOLD = 0.25; // Pop ratio below this for C/I struggle visual
+
 // General
 export const MAX_ZONE_LEVEL = 3;
+export const BULLDOZE_COST = 5; // Cost to clear a non-road, non-grass tile with 'Grass' tool
 
 // Old constants - review and remove/update if necessary
 export const MAX_SATISFACTION = 100; // This concept is changing
@@ -102,4 +115,4 @@ export const TILE_HALF_HEIGHT_ISO = TILE_HEIGHT_ISO / 2;
 export const TILE_DEPTH_UNIT = TILE_HEIGHT_ISO * 0.75;
 export const GAME_TICK_INTERVAL = 2000; // Faster ticks for more responsive simulation
 
-export const INITIAL_BUDGET = 5000; // Increased budget for more initial options
+export const INITIAL_BUDGET = 3000; // Further reduced initial budget for hardness
