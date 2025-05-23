@@ -1,6 +1,6 @@
 import { GridTile, TileType } from '../types';
 import * as C from '../config/constants';
-import { TILE_TYPES } from '../config/tileTypes'; // Ensure TILE_TYPES is imported
+import { TILE_TYPES } from '../config/tileTypes';
 
 export class GridController {
     public grid: GridTile[][] = [];
@@ -82,24 +82,81 @@ export class GridController {
         }
     }
 
-    private generateInitialParks(): void {
-        const numParkClusters = Math.floor(Math.random() * 3) + 2;
-        for (let i = 0; i < numParkClusters; i++) {
-            const clusterSizeX = Math.floor(Math.random() * 2) + 1;
-            const clusterSizeY = Math.floor(Math.random() * 2) + 1;
-            let attempts = 0;
-            let seedX: number, seedY: number;
-             do {
-                seedX = Math.floor(Math.random() * (C.GRID_SIZE_X - clusterSizeX));
-                seedY = Math.floor(Math.random() * (C.GRID_SIZE_Y - clusterSizeY));
-                attempts++;
-            } while (!this.isAreaClearForFeature(seedX, seedY, clusterSizeX, clusterSizeY, [TILE_TYPES.GRASS.id]) && attempts < 20);
+    private isAreaNearWater(
+        startX: number, 
+        startY: number, 
+        sizeX: number, 
+        sizeY: number, 
+        proximityRadius: number
+    ): boolean {
+        const checkStartX = Math.max(0, startX - proximityRadius);
+        const checkStartY = Math.max(0, startY - proximityRadius);
+        const checkEndX = Math.min(C.GRID_SIZE_X - 1, startX + sizeX - 1 + proximityRadius);
+        const checkEndY = Math.min(C.GRID_SIZE_Y - 1, startY + sizeY - 1 + proximityRadius);
 
-            if(this.isAreaClearForFeature(seedX, seedY, clusterSizeX, clusterSizeY, [TILE_TYPES.GRASS.id])){
-                for (let y = seedY; y < seedY + clusterSizeY; y++) {
-                    for (let x = seedX; x < seedX + clusterSizeX; x++) {
-                        if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
-                            this.grid[y][x].type = TILE_TYPES.NATURAL_PARK;
+        for (let y = checkStartY; y <= checkEndY; y++) {
+            for (let x = checkStartX; x <= checkEndX; x++) {
+                if (this.grid[y] && this.grid[y][x] && this.grid[y][x].type === TILE_TYPES.WATER) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private generateInitialParks(): void {
+        const numParkClusters = Math.floor(Math.random() * 10) + 10; // e.g., 10 to 19 clusters
+        const waterProximityRadius = 2; // How close to water to be considered "near"
+        const attemptsPerParkForWater = 5; // Try this many times to place a park near water
+        const fallbackMaxAttempts = 30; // Max attempts for fallback random placement
+
+        for (let i = 0; i < numParkClusters; i++) {
+            const clusterSizeX = Math.floor(Math.random() * 2) + 1; // 1 or 2
+            const clusterSizeY = Math.floor(Math.random() * 2) + 1; // 1 or 2
+            let parkPlaced = false;
+
+            // Attempt 1: Try to place near water
+            for (let attempt = 0; attempt < attemptsPerParkForWater; attempt++) {
+                const seedX = Math.floor(Math.random() * (C.GRID_SIZE_X - clusterSizeX));
+                const seedY = Math.floor(Math.random() * (C.GRID_SIZE_Y - clusterSizeY));
+
+                if (this.isAreaClearForFeature(seedX, seedY, clusterSizeX, clusterSizeY, [TILE_TYPES.GRASS.id]) &&
+                    this.isAreaNearWater(seedX, seedY, clusterSizeX, clusterSizeY, waterProximityRadius)) {
+                    
+                    for (let y = seedY; y < seedY + clusterSizeY; y++) {
+                        for (let x = seedX; x < seedX + clusterSizeX; x++) {
+                            if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
+                                this.grid[y][x].type = TILE_TYPES.NATURAL_PARK;
+                            }
+                        }
+                    }
+                    parkPlaced = true;
+                    break; // Park placed near water, move to the next park cluster
+                }
+            }
+
+            // Attempt 2: Fallback to random placement if not placed near water
+            if (!parkPlaced) {
+                let fallbackAttempts = 0;
+                let seedX: number = 0, seedY: number = 0; // Initialize to avoid potential unassigned error if loop doesn't run
+                let foundClearSpot = false;
+
+                do {
+                    seedX = Math.floor(Math.random() * (C.GRID_SIZE_X - clusterSizeX));
+                    seedY = Math.floor(Math.random() * (C.GRID_SIZE_Y - clusterSizeY));
+                    if (this.isAreaClearForFeature(seedX, seedY, clusterSizeX, clusterSizeY, [TILE_TYPES.GRASS.id])) {
+                        foundClearSpot = true;
+                        break;
+                    }
+                    fallbackAttempts++;
+                } while (fallbackAttempts < fallbackMaxAttempts);
+
+                if (foundClearSpot) {
+                    for (let y = seedY; y < seedY + clusterSizeY; y++) {
+                        for (let x = seedX; x < seedX + clusterSizeX; x++) {
+                            if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
+                                this.grid[y][x].type = TILE_TYPES.NATURAL_PARK;
+                            }
                         }
                     }
                 }
@@ -111,7 +168,7 @@ export class GridController {
         for (let y = startY; y < startY + sizeY; y++) {
             for (let x = startX; x < startX + sizeX; x++) {
                 if (x < 0 || x >= C.GRID_SIZE_X || y < 0 || y >= C.GRID_SIZE_Y) return false;
-                if (!allowedTypes.includes(this.grid[y][x].type.id)) return false;
+                if (!this.grid[y] || !this.grid[y][x] || !allowedTypes.includes(this.grid[y][x].type.id)) return false;
             }
         }
         return true;
