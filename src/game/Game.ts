@@ -1,3 +1,4 @@
+import * as PIXI from 'pixi.js';
 import { TILE_TYPES } from '../config/tileTypes';
 import * as C from '../config/constants';
 import { GridTile, TileType, Coordinates, GameMode, ViewMode } from '../types';
@@ -13,10 +14,11 @@ import { SimulationController } from './SimulationController';
 import { InputController } from './InputController';
 
 export class Game {
-    private canvas: HTMLCanvasElement;
+    public app: PIXI.Application;
+    private canvasElement: HTMLCanvasElement; 
     
     // Game State
-    public currentMode: GameMode = 'pan'; // Start in pan mode
+    public currentMode: GameMode = 'pan';
     public currentViewMode: ViewMode = 'default';
     public currentBuildType: TileType | null = null; 
 
@@ -48,28 +50,57 @@ export class Game {
     public simulationController: SimulationController; 
     private inputController: InputController;
 
+    // FPS Counter
+    private fpsDisplayElement: HTMLElement | null = null;
+    private showFps: boolean = false;
+    private lastFpsUpdateTime: number = 0;
+    private frameCount: number = 0;
+
 
     constructor() {
-        this.canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
-
         this.mainInfoPanel = new MainInfoPanel();
         this.buildToolbar = new BuildToolbar();
         this.messageBox = new MessageBox();
         this.tileInfoPane = new TileInfoPane();
-
         this.gridController = new GridController();
-        this.renderer = new Renderer(this.canvas, () => this); 
+
+        this.app = new PIXI.Application({
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: 0x72a372, 
+            antialias: true, 
+        });
+
+        this.canvasElement = this.app.view as HTMLCanvasElement; 
+        
+        const canvasContainer = document.getElementById('pixi-canvas-container');
+        if (!canvasContainer) {
+            throw new Error("pixi-canvas-container not found!");
+        }
+        this.canvasElement.style.width = '100%';
+        this.canvasElement.style.height = '100%';
+        canvasContainer.appendChild(this.canvasElement);
+
+        this.renderer = new Renderer(this.app, () => this); 
         this.simulationController = new SimulationController(this.gridController, this);
+        this.inputController = new InputController(this.canvasElement, this);
+
+        // Check for FPS parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        this.showFps = urlParams.get('fps') === 'true';
     }
 
     public initializeGame(): void {
         this.setupComponentInteractions();
+        
+        if (this.showFps) {
+            this.setupFpsCounter();
+        }
+
         const initialFinance = this.simulationController.processGameTick(); 
         this.updateAllUI(initialFinance.taxes, initialFinance.costs, initialFinance.net); 
         this.setCanvasSize(); 
         
-        this.inputController = new InputController(this.canvas, this);
-
         this.currentMode = 'pan'; 
         this.currentBuildType = null; 
         this.messageBox.show('Pan mode active. Select a tool or pan the map.', 1500);
@@ -81,6 +112,30 @@ export class Game {
         window.addEventListener('resize', () => this.handleResize());
         
         this.drawGame(); 
+    }
+
+    private setupFpsCounter(): void {
+        this.fpsDisplayElement = document.createElement('div');
+        this.fpsDisplayElement.id = 'fpsDisplay';
+        // Basic styling, can be enhanced with CSS
+        this.fpsDisplayElement.textContent = 'FPS: -';
+        document.body.appendChild(this.fpsDisplayElement);
+
+        this.lastFpsUpdateTime = performance.now();
+        this.frameCount = 0;
+
+        this.app.ticker.add(() => {
+            if (!this.fpsDisplayElement) return;
+
+            this.frameCount++;
+            const currentTime = performance.now();
+            if (currentTime >= this.lastFpsUpdateTime + 1000) { // Update every second
+                const fps = Math.round((this.frameCount * 1000) / (currentTime - this.lastFpsUpdateTime));
+                this.fpsDisplayElement.textContent = `FPS: ${fps}`;
+                this.lastFpsUpdateTime = currentTime;
+                this.frameCount = 0;
+            }
+        });
     }
 
     private handleResize(): void {
@@ -118,17 +173,15 @@ export class Game {
         this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
         this.setCanvasCursor();
 
-        // Determine if build preview state changed *after* mode/tool update
         const newBuildPreviewActive = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
         if (oldBuildPreviewActive !== newBuildPreviewActive) {
             needsRedrawForBuildPreview = true;
         }
         
-        // Update hover tile display based on the new state
-        this.updateHoveredTileDisplay(this.hoveredTile); // Pass current hovered coords
+        this.updateHoveredTileDisplay(this.hoveredTile);
 
         if (needsRedrawForBuildPreview) {
-            this.drawGame(); // Redraw if build preview changed
+            this.drawGame();
         }
     }
 
@@ -142,41 +195,41 @@ export class Game {
         else if (newMode === 'pollution_heatmap') modeName = "Pollution Heatmap";
         this.messageBox.show(`${modeName} view active.`, 2000);
         
-        // If view mode changed, this might affect info pane or build preview
         this.updateHoveredTileDisplay(this.hoveredTile); 
-        if (oldViewMode !== newMode) { // Always redraw if view mode actually changed
+        if (oldViewMode !== newMode) {
             this.drawGame();
         }
     }
 
 
     public setCanvasCursor(): void {
-        this.canvas.classList.remove('pan-mode-active', 'pan-mode-dragging'); 
-        if (this.currentMode === 'pan') {
-            this.canvas.classList.add('pan-mode-active');
-            this.canvas.style.cursor = this.isDragging ? 'grabbing' : 'grab';
-        } else { 
-             this.canvas.style.cursor = 'default'; 
+        if (this.canvasElement) {
+            this.canvasElement.classList.remove('pan-mode-active', 'pan-mode-dragging'); 
+            if (this.currentMode === 'pan') {
+                this.canvasElement.classList.add('pan-mode-active');
+                this.canvasElement.style.cursor = this.isDragging ? 'grabbing' : 'grab';
+            } else { 
+                 this.canvasElement.style.cursor = 'default'; 
+            }
         }
     }
 
     public setCanvasSize(): void {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        this.app.renderer.resize(window.innerWidth, window.innerHeight);
         
         const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO;
-        
-        this.cameraOffsetX = this.canvas.width / 2 - (C.GRID_SIZE_X - C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO / 2;
-        this.cameraOffsetY = this.canvas.height / 2 - gridPixelHeight / 2;
+        this.cameraOffsetX = this.app.screen.width / 2 - (C.GRID_SIZE_X - C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO / 2;
+        this.cameraOffsetY = this.app.screen.height / 2 - gridPixelHeight / 2;
         
         this.setCanvasCursor();
     }
 
     public drawGame(): void {
+        // The actual drawing is handled by Pixi's ticker automatically.
+        // This method updates the state of the Pixi objects for the renderer.
         this.renderer.render(
             this.gridController.grid,
             this.cameraOffsetX, this.cameraOffsetY,
-            null, 
             (this.currentMode === 'build' && this.currentViewMode === 'default' && this.currentBuildType) ? this.hoveredTile : null,
             this.currentBuildType,
             this.currentViewMode
@@ -191,24 +244,19 @@ export class Game {
         );
     }
     
-    // Renamed from updateHoveredTile to make its purpose clearer: updating display based on hover
     public updateHoveredTileDisplay(coords: Coordinates | null): void {
-        // Build Preview Redraw Check (if coords or preview status changed)
-        // This part only determines if the *canvas* needs a redraw due to build preview.
         let needsCanvasRedrawForBuildPreview = false;
-        const oldHoveredTileForPreview = this.hoveredTile; // Store what the game *thinks* is hovered before updating it
+        const oldHoveredTileForPreview = this.hoveredTile;
         const shouldShowBuildPreviewNow = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
         
-        // If the hovered tile itself has changed OR if the status of whether a build preview should show has changed
         if ((oldHoveredTileForPreview?.x !== coords?.x || oldHoveredTileForPreview?.y !== coords?.y) ||
-            (shouldShowBuildPreviewNow !== (this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType && !!oldHoveredTileForPreview))) {
-             if(shouldShowBuildPreviewNow || (this.currentMode === 'build' && this.currentBuildType && oldHoveredTileForPreview && !coords) ) { // if preview should show now, or was showing and mouse left
+            (shouldShowBuildPreviewNow !== (!!this.currentBuildType && !!oldHoveredTileForPreview && this.currentMode === 'build' && this.currentViewMode === 'default'))) {
+             if(shouldShowBuildPreviewNow || (this.currentMode === 'build' && this.currentBuildType && oldHoveredTileForPreview && !coords) ) {
                 needsCanvasRedrawForBuildPreview = true;
              }
         }
-        this.hoveredTile = coords; // Officially update the game's hoveredTile state
+        this.hoveredTile = coords;
 
-        // Tile Info Pane Logic: Show if in default view AND mouse is over grid.
         if (this.currentViewMode === 'default') {
             if (coords) { 
                 const tileData = this.gridController.getTile(coords.x, coords.y);
@@ -226,11 +274,11 @@ export class Game {
         }
         
         if (needsCanvasRedrawForBuildPreview) { 
+            // Calling drawGame ensures the renderer updates its containers for the next Pixi tick
             this.drawGame();
         }
     }
     
-    // This method is called by InputController on mousemove
     public handleMouseMoveHover(coords: Coordinates | null): void {
         this.updateHoveredTileDisplay(coords);
     }
@@ -261,7 +309,6 @@ export class Game {
             this.messageBox.show(`Cannot build ${selectedTool.name} on ${tileData.type.name}.`, 2500);
             return false;
         }
-
 
         if (selectedTool.id === TILE_TYPES.GRASS.id) { 
             if (tileData.type.id !== TILE_TYPES.GRASS.id) { 
@@ -317,14 +364,16 @@ export class Game {
 
     private startGameLoop(): void {
         if (this.gameTickIntervalId) clearInterval(this.gameTickIntervalId);
+        // Game simulation tick
         this.gameTickIntervalId = window.setInterval(() => this.gameTick(), C.GAME_TICK_INTERVAL);
-        console.log("Game loop started.");
+        console.log("Game simulation loop started.");
     }
 
     private gameTick(): void {
         this.gameDay++;
         const economyUpdate = this.simulationController.processGameTick();
         this.updateAllUI(economyUpdate.taxes, economyUpdate.costs, economyUpdate.net); 
+        // Request the renderer to update the state of Pixi objects for the next render frame
         this.drawGame(); 
     }
 }

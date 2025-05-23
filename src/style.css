@@ -9,82 +9,102 @@ body {
     background-color: #333; /* Fallback background if canvas doesn't load */
 }
 
-#gameCanvas {
-    display: block; /* Remove extra space below canvas */
+/* The #pixi-canvas-container now holds the canvas and should be styled for positioning */
+#pixi-canvas-container {
+    display: block; 
     width: 100vw;
     height: 100vh;
-    background-color: #72a372; /* Default grass color as base */
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 1;
+    z-index: 1; /* Behind UI elements */
 }
+
+/* If you need specific styles for the canvas itself (e.g., cursor) */
+#pixi-canvas-container canvas { 
+    /* Cursors are now handled by gameInstance.setCanvasCursor() in Game.ts using classList */
+}
+
 .pan-mode-active { cursor: grab; }
 .pan-mode-dragging { cursor: grabbing; }
-.select-mode-active { cursor: crosshair; }
+/* .select-mode-active { cursor: crosshair; } /* Select mode was removed */
 
 #gameTitle {
     position: fixed;
-    top: 15px; /* Adjusted to not overlap mainInfoPanel much */
+    top: 10px; 
     left: 20px;
     z-index: 1020;
     color: white;
     text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
     font-size: 1.5rem; /* text-2xl */
-    padding: 2px 5px; /* Add a little padding for better editing experience */
-    border-radius: 4px; /* Optional: slightly rounded corners */
+    padding: 2px 5px; 
+    border-radius: 4px; 
 }
 
 #gameTitle[contenteditable="true"]:focus {
-    outline: 2px solid rgba(255, 255, 255, 0.7); /* A light outline to indicate focus */
-    background-color: rgba(0,0,0,0.2); /* Slight background change on focus */
+    outline: 2px solid rgba(255, 255, 255, 0.7); 
+    background-color: rgba(0,0,0,0.2); 
     cursor: text;
+}
+
+/* FPS Counter Style */
+#fpsDisplay {
+    position: fixed;
+    top: 50px; /* Position below title, adjust as needed */
+    left: 25px;
+    z-index: 1015; /* Below title (1020), above info panel (1010) */
+    color: white;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.7); /* Optional: improves readability */
 }
 
 
 #mainInfoPanel {
     position: fixed;
     top: 10px;
-    right: 10px; /* Moved to top-right */
-    left: auto;  /* Override centered positioning */
-    transform: none; /* Override centered positioning */
+    right: 10px; 
+    left: auto;  
+    transform: none; 
     padding: 8px 12px;
-    background-color: rgba(30, 41, 59, 0.85); /* bg-slate-800 with transparency */
+    background-color: rgba(30, 41, 59, 0.85); 
     backdrop-filter: blur(5px);
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0,0,0,0.25);
-    width: auto; /* Fit content */
-    max-width: calc(100vw - 180px); /* Max width considering title on left */
+    width: auto; 
+    max-width: calc(100vw - 180px); 
     z-index: 1010;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(90px, auto));
     gap: 5px;
-    font-size: 0.75em; /* Slightly smaller base font */
+    font-size: 0.75em; 
 }
 #mainInfoPanel div {
     padding: 5px;
-    background-color: rgba(51, 65, 85, 0.7); /* bg-slate-700 with transparency */
+    background-color: rgba(51, 65, 85, 0.7); 
     border-radius: 6px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-width: 80px; /* Ensure items don't get too squished */
+    min-width: 80px; 
 }
 #mainInfoPanel .info-label {
-    font-size: 0.9em; /* Relative to panel's font-size */
-    color: #cbd5e1; /* slate-300 */
+    font-size: 0.9em; 
+    color: #cbd5e1; 
     margin-bottom: 2px;
 }
 #mainInfoPanel .info-value {
     font-weight: 600;
-    font-size: 1em; /* Relative to panel's font-size */
-    color: #f8fafc; /* slate-50 */
+    font-size: 1em; 
+    color: #f8fafc; 
 }
-.positive-net { color: #4ade80; } /* green-400 */
-.negative-net { color: #f87171; } /* red-400 */
-#budgetDisplay.text-red-500 { color: #f87171 !important; } /* Ensure override */
-#budgetDisplay.text-green-600 { color: #4ade80 !important; } /* Ensure override */
+.positive-net { color: #4ade80; } 
+.negative-net { color: #f87171; } 
+#budgetDisplay.text-red-500 { color: #f87171 !important; } 
+#budgetDisplay.text-green-600 { color: #4ade80 !important; } 
 
 
 .build-toolbar {
@@ -93,85 +113,78 @@ body {
     left: 50%;
     transform: translateX(-50%);
     padding: 10px;
-    background-color: rgba(30, 41, 59, 0.85); /* bg-slate-800 with transparency */
+    background-color: rgba(30, 41, 59, 0.85); 
     backdrop-filter: blur(5px);
     border-radius: 10px;
     display: flex;
     gap: 6px;
-    flex-wrap: nowrap; /* Ensure single row */
-    overflow-x: auto; /* Allow horizontal scroll if needed */
-    align-items: center; /* Vertically align items if heights differ */
+    flex-wrap: nowrap; 
+    overflow-x: auto; 
+    align-items: center; 
     justify-content: center;
     z-index: 1010;
     box-shadow: 0 -3px 10px rgba(0,0,0,0.2);
-    max-width: calc(100vw - 30px); /* Prevent edge collision on small screens */
+    max-width: calc(100vw - 30px); 
 }
 .build-button {
     padding: 7px 12px;
-    border: 1px solid rgba(71, 85, 105, 0.8); /* border-slate-600 */
+    border: 1px solid rgba(71, 85, 105, 0.8); 
     border-radius: 6px;
-    background-color: #334155; /* bg-slate-700 */
-    color: #e2e8f0; /* slate-200 */
+    background-color: #334155; 
+    color: #e2e8f0; 
     font-weight: 600;
     cursor: pointer;
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
     font-size: 0.8rem;
     box-shadow: 0 2px 3px rgba(0,0,0,0.15);
-    display: inline-flex; /* For icon alignment */
+    display: inline-flex; 
     align-items: center;
-    white-space: nowrap; /* Prevent text wrapping within buttons */
+    white-space: nowrap; 
 }
 .build-button:hover {
-    background-color: #475569; /* bg-slate-600 */
+    background-color: #475569; 
     border-color: rgba(96, 113, 134, 0.8);
 }
 .build-button.selected {
-    background-color: #1e293b; /* bg-slate-800 (darker) */
+    background-color: #1e293b; 
     color: white;
     transform: translateY(1px);
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.3), 0 1px 1px rgba(0,0,0,0.1);
-    border-color: #0f172a; /* slate-900 */
+    border-color: #0f172a; 
 }
 
-/* Icon styling */
 .icon-span {
     margin-right: 5px;
-    font-size: 0.9em; /* Slightly smaller than button text */
-    line-height: 1; /* Ensure it doesn't mess with button height */
+    font-size: 0.9em; 
+    line-height: 1; 
 }
 
-/* Muted colors for Pan, Select, View */
 .build-button.pan-button,
-.build-button.select-button,
 .build-button.view-mode-button {
-    background-color: #4b5563; /* gray-600 */
-    border-color: #6b7280; /* gray-500 */
+    background-color: #4b5563; 
+    border-color: #6b7280; 
 }
 .build-button.pan-button:hover,
-.build-button.select-button:hover,
 .build-button.view-mode-button:hover {
-    background-color: #525e6f; /* slightly lighter gray */
+    background-color: #525e6f; 
     border-color: #7c8899;
 }
 .build-button.pan-button.selected,
-.build-button.select-button.selected,
-.build-button.view-mode-button.selected { /* View button might not use 'selected' in the same way */
-    background-color: #374151; /* gray-700 */
+.build-button.view-mode-button.selected { 
+    background-color: #374151; 
     color: white;
-    border-color: #1f2937; /* gray-800 */
+    border-color: #1f2937; 
 }
 
 
-/* Specific button colors for build types, ensure good contrast */
-.build-button.grass { background-color: #4d7c0f; } /* lime-700 */
-.build-button.road { background-color: #64748b; } /* slate-500 */
-.build-button.water { background-color: #0ea5e9; } /* sky-500 */
-.build-button.park { background-color: #16a34a; } /* green-600 */
-.build-button.residential { background-color: #f97316; } /* orange-500 */
-.build-button.commercial { background-color: #8b5cf6; } /* violet-500 */
-.build-button.industrial { background-color: #78716c; } /* stone-500 */
+.build-button.grass { background-color: #4d7c0f; } 
+.build-button.road { background-color: #64748b; } 
+.build-button.water { background-color: #0ea5e9; } 
+.build-button.park { background-color: #16a34a; } 
+.build-button.residential { background-color: #f97316; } 
+.build-button.commercial { background-color: #8b5cf6; } 
+.build-button.industrial { background-color: #78716c; } 
 
-/* Hover for specific types */
 .build-button.grass:hover { background-color: #65a30d; }
 .build-button.road:hover { background-color: #94a3b8; }
 .build-button.water:hover { background-color: #38bdf8; }
@@ -181,22 +194,21 @@ body {
 .build-button.industrial:hover { background-color: #a1a1aa; }
 
 
-/* Toolbar Separator */
 .toolbar-separator {
     width: 1px;
-    height: 20px; /* Adjust height to match button inner height roughly */
-    background-color: rgba(71, 85, 105, 0.6); /* slate-600 with transparency */
-    margin-left: 4px; /* Space before separator */
-    margin-right: 8px; /* Space after separator */
+    height: 20px; 
+    background-color: rgba(71, 85, 105, 0.6); 
+    margin-left: 4px; 
+    margin-right: 8px; 
 }
 
 
 #messageBox {
     position: fixed;
-    top: 80px; /* Adjusted to be below mainInfoPanel */
+    top: 80px; 
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(15, 23, 42, 0.85); /* slate-900 with transparency */
+    background-color: rgba(15, 23, 42, 0.85); 
     color: white;
     padding: 10px 20px;
     border-radius: 8px;
@@ -211,9 +223,9 @@ body {
 
 #tileInfoPane {
     position: fixed;
-    top: 80px; /* Adjusted */
+    top: 80px; 
     right: 20px;
-    background-color: rgba(30, 41, 59, 0.9); /* bg-slate-800 with more opacity */
+    background-color: rgba(30, 41, 59, 0.9); 
     backdrop-filter: blur(5px);
     padding: 15px;
     border-radius: 8px;
@@ -222,19 +234,19 @@ body {
     font-size: 0.75rem;
     z-index: 1000;
     display: none;
-    color: #cbd5e1; /* slate-300 */
+    color: #cbd5e1; 
 }
 #tileInfoPane h3 {
-    color: #f1f5f9; /* slate-100 */
-    font-size: 1rem; /* text-base */
+    color: #f1f5f9; 
+    font-size: 1rem; 
     font-weight: bold;
-    margin-bottom: 0.75rem; /* mb-3 */
+    margin-bottom: 0.75rem; 
 }
 #tileInfoPane p { margin-bottom: 5px; }
-#tileInfoPane span { font-weight: 600; color: #93c5fd; } /* blue-300 */
-#closeInfoPane {
+#tileInfoPane span { font-weight: 600; color: #93c5fd; } 
+#closeInfoPane { /* This button was removed from HTML but style remains */
     margin-top: 12px;
-    background-color: #ef4444; /* red-500 */
+    background-color: #ef4444; 
     color: white;
     border: none;
     padding: 7px 12px;
@@ -244,22 +256,27 @@ body {
     font-size: 0.8rem;
     width: 100%;
 }
-#closeInfoPane:hover { background-color: #dc2626; } /* red-600 */
+#closeInfoPane:hover { background-color: #dc2626; } 
 
 
-@media (max-width: 768px) { /* md breakpoint */
+@media (max-width: 768px) { 
     #gameTitle {
-        font-size: 1.25rem; /* text-xl */
+        font-size: 1.25rem; 
         left: 15px;
         top: 12px;
+    }
+    #fpsDisplay {
+        top: 38px; /* Adjust if title size/pos changes */
+        left: 15px;
+        font-size: 0.75rem;
     }
     #mainInfoPanel {
         padding: 6px 8px;
         gap: 4px;
         grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
-        max-width: calc(100vw - 20px); /* Take more width */
+        max-width: calc(100vw - 20px); 
         left: 50%;
-        transform: translateX(-50%); /* Center it on small screens */
+        transform: translateX(-50%); 
         right: auto;
     }
     #mainInfoPanel .info-label { font-size: 0.8em; }
@@ -269,14 +286,13 @@ body {
         bottom: 10px;
         padding: 8px;
         gap: 5px;
-        /* width: calc(100% - 20px); /* More width, less padding -> removed to allow content to define width with max-width */
     }
     .build-button {
         padding: 6px 10px;
         font-size: 0.75rem;
     }
     #messageBox, #tileInfoPane {
-        top: 75px; /* Adjust if mainInfoPanel height changes significantly */
+        top: 75px; 
         max-width: 90%;
     }
      #tileInfoPane {
@@ -287,33 +303,34 @@ body {
     }
 }
 
-@media (max-width: 480px) { /* sm breakpoint */
-    #gameTitle { display: none; } /* Hide title on very small screens */
+@media (max-width: 480px) { 
+    #gameTitle { display: none; } 
+    #fpsDisplay {
+        top: 10px; /* Position at top if title is hidden */
+        left: 10px;
+        font-size: 0.7rem;
+    }
     #mainInfoPanel {
-        grid-template-columns: repeat(2, 1fr); /* Force 2 columns */
+        grid-template-columns: repeat(2, 1fr); 
         font-size: 0.7rem;
         max-width: calc(100vw - 10px);
         top: 5px;
     }
     .build-toolbar {
-        /* flex-direction: row; /* Keep horizontal but allow wrap */
-        /* overflow-x: auto; /* Allow horizontal scroll if too many buttons */
-        /* flex-wrap: nowrap; -> already set */
-        justify-content: flex-start; /* Align to start when scrolling */
-        /* width: calc(100% - 10px); -> removed, max-width handles this */
+        justify-content: flex-start; 
         bottom: 5px;
     }
     .build-button {
-        flex-shrink: 0; /* Prevent buttons from shrinking */
+        flex-shrink: 0; 
     }
     #messageBox, #tileInfoPane {
-        top: 100px; /* May need fine-tuning based on mainInfoPanel height */
+        top: 100px; 
     }
     #tileInfoPane {
         left: 50%;
         transform: translateX(-50%);
         top: auto;
-        bottom: 60px; /* Position above toolbar (adjust if toolbar height changes) */
+        bottom: 60px; 
         width: calc(100% - 20px);
         max-width: 300px;
     }

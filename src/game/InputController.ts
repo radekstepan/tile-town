@@ -1,18 +1,19 @@
 import { Coordinates } from '../types';
 import { getTileCoordinatesFromScreenPoint } from '../utils/geometryUtils';
-import { Game } from './Game'; // Forward declaration for type hinting
+import { Game } from './Game'; // Game type for gameInstance
 
 export class InputController {
-    private canvas: HTMLCanvasElement;
+    private canvas: HTMLCanvasElement; // This will be Pixi's canvas
     private gameInstance: Game;
 
     constructor(canvas: HTMLCanvasElement, gameInstance: Game) {
-        this.canvas = canvas;
+        this.canvas = canvas; // Pixi's app.view is passed here
         this.gameInstance = gameInstance;
         this.setupEventListeners();
     }
 
     private setupEventListeners(): void {
+        // Standard DOM event listeners on the canvas element work fine with PixiJS
         this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
@@ -26,15 +27,15 @@ export class InputController {
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
+        // cameraOffset X and Y are world-space offsets for the tile container in Pixi
+        // getTileCoordinatesFromScreenPoint expects canvas-relative mouse coords and world offsets
         const targetCoords = getTileCoordinatesFromScreenPoint(mouseX, mouseY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
 
         if (event.button === 0) { 
             if (this.gameInstance.currentMode === 'pan') {
                 this.gameInstance.isDragging = true;
                 this.gameInstance.setCanvasCursor(); 
-            // Removed 'select' mode logic
-            } else if (this.gameInstance.currentMode === 'build') { // Includes "inspect" state (build mode, no tool)
-                // If a build tool is active, attempt to build
+            } else if (this.gameInstance.currentMode === 'build') {
                 if (this.gameInstance.currentBuildType) {
                     const buildCoords = this.gameInstance.hoveredTile ? this.gameInstance.hoveredTile : targetCoords;
                     if (buildCoords) {
@@ -43,12 +44,12 @@ export class InputController {
                             this.gameInstance.lastBuiltTileDuringDrag = { x: buildCoords.x, y: buildCoords.y };
                         }
                     }
-                    this.gameInstance.isDragging = true; // Enable painting for build tools
+                    this.gameInstance.isDragging = true; 
                 } else {
-                    // If in build mode but no tool selected (inspect mode), click does nothing on grid
+                    // Inspect mode click - potentially select tile if that feature is re-added
                 }
             }
-        } else if (event.button === 1) { // Middle mouse for panning
+        } else if (event.button === 1) { 
             this.gameInstance.isDragging = true; 
             this.gameInstance.setCanvasCursor(); 
         }
@@ -62,19 +63,18 @@ export class InputController {
         const mouseY = event.clientY - rect.top;
         const currentMouseTile = getTileCoordinatesFromScreenPoint(mouseX, mouseY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
 
-        // Pass hover coordinates to Game instance to handle info pane and build preview logic
         this.gameInstance.handleMouseMoveHover(currentMouseTile);
 
 
         if (this.gameInstance.isDragging) {
-            if (this.gameInstance.currentMode === 'pan' || event.buttons === 4) { 
+            // Middle mouse button is 4 when event.buttons is checked
+            if (this.gameInstance.currentMode === 'pan' || (event.buttons & 4) === 4 ) { 
                 const dx = event.clientX - this.gameInstance.lastMouseX;
                 const dy = event.clientY - this.gameInstance.lastMouseY;
                 this.gameInstance.cameraOffsetX += dx;
                 this.gameInstance.cameraOffsetY += dy;
                 this.gameInstance.drawGame();
             } else if (this.gameInstance.currentMode === 'build' && this.gameInstance.currentBuildType) {
-                // Paint-build logic
                 if (currentMouseTile) {
                     if (!this.gameInstance.lastBuiltTileDuringDrag || 
                         currentMouseTile.x !== this.gameInstance.lastBuiltTileDuringDrag.x || 
@@ -93,7 +93,7 @@ export class InputController {
         this.gameInstance.lastMouseY = event.clientY;
     }
 
-    private handleMouseUp(event: MouseEvent): void {
+    private handleMouseUp(event: MouseEvent): void { // Added event param
         if (this.gameInstance.isDragging) {
             if (this.gameInstance.currentMode === 'build') {
                 this.gameInstance.lastBuiltTileDuringDrag = null; 
@@ -104,7 +104,6 @@ export class InputController {
     }
 
     private handleMouseLeave(): void {
-        // When mouse leaves canvas, clear hover related states in Game instance
         this.gameInstance.handleMouseMoveHover(null);
 
         if (this.gameInstance.isDragging) {
@@ -125,20 +124,18 @@ export class InputController {
             const touchY = touch.clientY - rect.top;
             const targetCoords = getTileCoordinatesFromScreenPoint(touchX, touchY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
             
-            // Update hover display for touch start as well
             this.gameInstance.handleMouseMoveHover(targetCoords);
 
 
             if (this.gameInstance.currentMode === 'pan') {
                 this.gameInstance.isDragging = true;
             } else if (this.gameInstance.currentMode === 'build') {
-                if (this.gameInstance.currentBuildType && targetCoords) { // Only build if tool is selected
+                if (this.gameInstance.currentBuildType && targetCoords) { 
                     const built = this.gameInstance.handleCanvasBuildInteraction(targetCoords.x, targetCoords.y);
                     if (built) {
                         this.gameInstance.lastBuiltTileDuringDrag = { x: targetCoords.x, y: targetCoords.y };
                     }
                 }
-                // Allow dragging for painting only if a tool is selected
                 if (this.gameInstance.currentBuildType) {
                     this.gameInstance.isDragging = true; 
                 }
@@ -164,7 +161,6 @@ export class InputController {
             const touchY = touch.clientY - rect.top;
             const currentTouchTile = getTileCoordinatesFromScreenPoint(touchX, touchY, this.gameInstance.cameraOffsetX, this.gameInstance.cameraOffsetY);
 
-            // Update hover display during touch move
             this.gameInstance.handleMouseMoveHover(currentTouchTile);
 
             if (this.gameInstance.currentMode === 'pan') {
@@ -194,7 +190,6 @@ export class InputController {
     }
 
     private handleTouchEnd(event: TouchEvent): void { 
-        // Clear hover display on touch end if no touches remain
         if (event.touches.length === 0) {
             this.gameInstance.handleMouseMoveHover(null);
         }
@@ -205,7 +200,7 @@ export class InputController {
             }
             this.gameInstance.isDragging = false;
         }
-        if (!this.gameInstance.isDragging) {
+        if (!this.gameInstance.isDragging) { // This was checking isDragging, should likely always reset these on touch end if no touches remain
             this.gameInstance.lastTouchX = null;
             this.gameInstance.lastTouchY = null;
         }
