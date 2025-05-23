@@ -4,21 +4,35 @@ import { lightenColor, darkenColor } from '../utils/colorUtils';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
+    private gameInstanceGetter: () => any; // To get game instance for simulation data
 
-    constructor(canvas: HTMLCanvasElement) {
+    constructor(canvas: HTMLCanvasElement, gameInstanceGetter: () => any) {
         const context = canvas.getContext('2d');
         if (!context) {
             throw new Error("Could not get 2D rendering context from canvas.");
         }
         this.ctx = context;
+        this.gameInstanceGetter = gameInstanceGetter;
     }
 
-    private getHeatmapColor(score: number): string | null {
-        if (score < 0) return null;
-        const alpha = 0.4;
-        if (score < C.SATISFACTION_LOW_THRESHOLD) return `rgba(255, 0, 0, ${alpha})`;
-        if (score > C.SATISFACTION_HIGH_THRESHOLD) return `rgba(0, 255, 0, ${alpha})`;
-        return `rgba(255, 255, 0, ${alpha})`;
+    private getHeatmapColor(value: number, maxValue: number, type: 'positive' | 'negative'): string | null {
+        if (value < 0 && type === 'positive') return null; // No negative values for positive heatmaps like tile value
+        if (value <= 0 && type === 'negative') return null; // No positive values for negative heatmaps like pollution
+
+        const normalizedValue = Math.min(Math.abs(value) / maxValue, 1);
+        const alpha = 0.4 + normalizedValue * 0.3; // Vary alpha slightly with intensity
+
+        if (type === 'positive') { // For Tile Value (Green=Good, Yellow=Mid, Red=Bad concept needs adjustment)
+                                   // Let's do: Red (low value) -> Yellow (mid) -> Green (high value)
+            if (normalizedValue < 0.33) return `rgba(255, ${Math.floor(normalizedValue*3 * 255)}, 0, ${alpha})`; // Red to Yellow
+            else if (normalizedValue < 0.66) return `rgba(${Math.floor(255 - (normalizedValue-0.33)*3 * 255)}, 255, 0, ${alpha})`; // Yellow to Green
+            else return `rgba(0, 255, ${Math.floor((normalizedValue-0.66)*3 * 255/2)}, ${alpha})`; // Green (slightly bluish high green)
+
+        } else { // For Pollution (Green=Low, Yellow=Mid, Red=High)
+            const r = Math.floor(255 * normalizedValue);
+            const g = Math.floor(255 * (1 - normalizedValue));
+            return `rgba(${r}, ${g}, 0, ${alpha})`;
+        }
     }
 
     private drawTileObject(
@@ -33,7 +47,6 @@ export class Renderer {
         this.ctx.translate(screenX, screenY);
         this.ctx.globalAlpha = customAlpha;
 
-        // --- Base tile ---
         this.ctx.beginPath();
         this.ctx.moveTo(0, 0);
         this.ctx.lineTo(C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -44,32 +57,23 @@ export class Renderer {
         this.ctx.fillStyle = tileType.color;
         this.ctx.fill();
 
-        // --- Border style setup ---
         if (isSelected) {
-            this.ctx.strokeStyle = '#FFFF00'; // Bright yellow for selected
-            this.ctx.lineWidth = 2;          // Keep selected thicker
+            this.ctx.strokeStyle = '#FFFF00'; 
+            this.ctx.lineWidth = 2;          
         } else {
-            // "A smidgen more" prominent borders, still matching tile color
-            this.ctx.lineWidth = customAlpha < 1.0 ? 0.35 : 0.7; // Another slight increase
-            // For base tile, border is an even more noticeably darker version of tileType.color
+            this.ctx.lineWidth = customAlpha < 1.0 ? 0.35 : 0.7; 
             this.ctx.strokeStyle = customAlpha < 1.0 
-                ? darkenColor(tileType.color, 12)  // For translucent preview
-                : darkenColor(tileType.color, 18); // For regular tiles
+                ? darkenColor(tileType.color, 12) 
+                : darkenColor(tileType.color, 18); 
         }
-        // Stroke for the base tile
         this.ctx.stroke(); 
 
-        // --- 3D Part (Building/Object) ---
         if (tileType.renderHeight && tileType.renderHeight > 0) {
             const buildingVisualHeight = tileType.renderHeight * C.TILE_DEPTH_UNIT;
             const topColor = lightenColor(tileType.color, 15);
             const sideColorDark = darkenColor(tileType.color, 15); 
             const sideColorLight = darkenColor(tileType.color, 5);  
 
-            // Line width is already set (either for selected or non-selected state from above).
-            // For non-selected 3D parts, their stroke color should be a darker version of their own fill.
-
-            // --- Right Side ---
             this.ctx.fillStyle = sideColorDark;
             this.ctx.beginPath();
             this.ctx.moveTo(C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -78,12 +82,11 @@ export class Renderer {
             this.ctx.lineTo(0, 0);
             this.ctx.closePath();
             this.ctx.fill();
-            if (!isSelected) { // Only change strokeStyle if not selected
-                this.ctx.strokeStyle = darkenColor(sideColorDark, 18); // Match base tile's relative darkness
+            if (!isSelected) { 
+                this.ctx.strokeStyle = darkenColor(sideColorDark, 18); 
             }
             this.ctx.stroke(); 
 
-            // --- Left Side ---
             this.ctx.fillStyle = sideColorLight;
             this.ctx.beginPath();
             this.ctx.moveTo(-C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
@@ -93,11 +96,10 @@ export class Renderer {
             this.ctx.closePath();
             this.ctx.fill();
             if (!isSelected) {
-                this.ctx.strokeStyle = darkenColor(sideColorLight, 18); // Match base tile's relative darkness
+                this.ctx.strokeStyle = darkenColor(sideColorLight, 18); 
             }
             this.ctx.stroke(); 
             
-            // --- Top Face ---
             this.ctx.fillStyle = topColor;
             this.ctx.beginPath();
             this.ctx.moveTo(0, -buildingVisualHeight);
@@ -107,7 +109,7 @@ export class Renderer {
             this.ctx.closePath();
             this.ctx.fill();
             if (!isSelected) {
-                this.ctx.strokeStyle = darkenColor(topColor, 18); // Match base tile's relative darkness
+                this.ctx.strokeStyle = darkenColor(topColor, 18); 
             }
             this.ctx.stroke(); 
         }
@@ -123,6 +125,7 @@ export class Renderer {
         currentViewMode: ViewMode
     ): void {
         this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+        const game = this.gameInstanceGetter(); // Get fresh game instance (and thus simulation controller)
 
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
@@ -131,15 +134,24 @@ export class Renderer {
             }
         }
 
-        if (currentViewMode === 'satisfaction_heatmap') {
+        if (currentViewMode === 'tile_value_heatmap' || currentViewMode === 'pollution_heatmap') {
             for (let y = 0; y < C.GRID_SIZE_Y; y++) {
                 for (let x = 0; x < C.GRID_SIZE_X; x++) {
-                    let score = -1;
-                    const tileData = gridData[y][x];
-                    if (tileData.type.parentZoneCategory === 'residential' && tileData.type.isBuilding && tileData.satisfactionData) {
-                        score = tileData.satisfactionData.score;
+                    let value = 0;
+                    let maxValue = 1;
+                    let heatmapType: 'positive' | 'negative' = 'positive';
+
+                    if (currentViewMode === 'tile_value_heatmap') {
+                        value = game.simulationController.getTileValueAt(x,y);
+                        maxValue = C.MAX_TILE_VALUE;
+                        heatmapType = 'positive';
+                    } else if (currentViewMode === 'pollution_heatmap') {
+                        value = game.simulationController.getPollutionAt(x,y);
+                        maxValue = C.MAX_POLLUTION;
+                        heatmapType = 'negative';
                     }
-                    const color = this.getHeatmapColor(score);
+                    
+                    const color = this.getHeatmapColor(value, maxValue, heatmapType);
                     if (color) {
                         const screenX = cameraOffsetX + (x - y) * C.TILE_HALF_WIDTH_ISO;
                         const screenY = cameraOffsetY + (x + y) * C.TILE_HALF_HEIGHT_ISO;

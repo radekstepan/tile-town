@@ -1,4 +1,4 @@
-import { GridTile, Coordinates, SatisfactionData, OperationalData } from '../types';
+import { GridTile, Coordinates } from '../types'; // Removed SatisfactionData, OperationalData
 
 type CloseCallback = () => void;
 
@@ -8,11 +8,12 @@ export class TileInfoPane {
     private tileInfoType: HTMLElement;
     private tileInfoCoords: HTMLElement;
     private tileInfoCarryCost: HTMLElement;
-    private tileInfoTaxes: HTMLElement;
-    private tileInfoPopulation: HTMLElement;
-    private tileInfoJobs: HTMLElement;
-    private tileInfoSatisfaction: HTMLElement;
-    private tileInfoOperation: HTMLElement;
+    private tileInfoPopulation: HTMLElement; // Now dynamic
+    private tileInfoLevel: HTMLElement; // New: for RCI level
+    private tileInfoJobs: HTMLElement; // Can be dynamic
+    private tileInfoTileValue: HTMLElement; // New: land value
+    private tileInfoPollution: HTMLElement; // New: pollution
+    private tileInfoRoadAccess: HTMLElement; // New: road access
     private closeButton: HTMLButtonElement;
 
     constructor(paneId: string = 'tileInfoPane') {
@@ -24,11 +25,12 @@ export class TileInfoPane {
         this.tileInfoType = document.getElementById('tileInfoType') as HTMLElement;
         this.tileInfoCoords = document.getElementById('tileInfoCoords') as HTMLElement;
         this.tileInfoCarryCost = document.getElementById('tileInfoCarryCost') as HTMLElement;
-        this.tileInfoTaxes = document.getElementById('tileInfoTaxes') as HTMLElement;
         this.tileInfoPopulation = document.getElementById('tileInfoPopulation') as HTMLElement;
+        this.tileInfoLevel = document.getElementById('tileInfoLevel') as HTMLElement;
         this.tileInfoJobs = document.getElementById('tileInfoJobs') as HTMLElement;
-        this.tileInfoSatisfaction = document.getElementById('tileInfoSatisfaction') as HTMLElement;
-        this.tileInfoOperation = document.getElementById('tileInfoOperation') as HTMLElement;
+        this.tileInfoTileValue = document.getElementById('tileInfoTileValue') as HTMLElement;
+        this.tileInfoPollution = document.getElementById('tileInfoPollution') as HTMLElement;
+        this.tileInfoRoadAccess = document.getElementById('tileInfoRoadAccess') as HTMLElement;
         this.closeButton = document.getElementById('closeInfoPane') as HTMLButtonElement;
 
         this.hide(); // Initially hidden
@@ -39,12 +41,13 @@ export class TileInfoPane {
             <h3 id="tileName" class="text-lg font-bold mb-2">Tile Info</h3>
             <p>Type: <span id="tileInfoType">N/A</span></p>
             <p>Coords: <span id="tileInfoCoords">N/A</span></p>
-            <p>Carry Cost: $<span id="tileInfoCarryCost">N/A</span> / period</p>
-            <p>Taxes: $<span id="tileInfoTaxes">N/A</span> / period</p>
             <p>Population: <span id="tileInfoPopulation">N/A</span></p>
+            <p>Level: <span id="tileInfoLevel">N/A</span></p>
             <p>Jobs: <span id="tileInfoJobs">N/A</span></p>
-            <p>Satisfaction: <span id="tileInfoSatisfaction">N/A</span></p>
-            <p>Operation: <span id="tileInfoOperation">N/A</span></p>
+            <p>Tile Value: <span id="tileInfoTileValue">N/A</span></p>
+            <p>Pollution: <span id="tileInfoPollution">N/A</span></p>
+            <p>Road Access: <span id="tileInfoRoadAccess">N/A</span></p>
+            <p>Carry Cost: $<span id="tileInfoCarryCost">N/A</span> / period</p>
             <button id="closeInfoPane">Close</button>
         `;
     }
@@ -60,22 +63,19 @@ export class TileInfoPane {
         this.tileInfoType.textContent = tileTypeData.name;
         this.tileInfoCoords.textContent = `${coords.x}, ${coords.y}`;
         this.tileInfoCarryCost.textContent = (tileTypeData.carryCost || 0).toFixed(1);
-        this.tileInfoTaxes.textContent = (tileTypeData.taxRate || 0).toFixed(1);
-        this.tileInfoPopulation.textContent = (tileTypeData.population || 0).toString();
-        this.tileInfoJobs.textContent = (tileTypeData.jobsProvided || 0).toString();
         
-        if (tileTypeData.parentZoneCategory === 'residential' && tileTypeData.isBuilding && tile.satisfactionData) {
-            const satData = tile.satisfactionData;
-            this.tileInfoSatisfaction.textContent = `${satData.score.toFixed(1)}% (W:${satData.work.toFixed(0)}, P:${satData.parkBonus.toFixed(0)}, H₂O:${satData.waterBonus.toFixed(0)}, M:${satData.mountainBonus.toFixed(0)}, D:${satData.density.toFixed(0)}, E:${satData.employmentPenalty.toFixed(0)}, I:${satData.industrialPenalty.toFixed(0)})`;
-            this.tileInfoOperation.textContent = 'N/A';
-        } else if ((tileTypeData.parentZoneCategory === 'commercial' || tileTypeData.parentZoneCategory === 'industrial') && tileTypeData.isBuilding && tile.operationalData) {
-            const opData = tile.operationalData;
-            this.tileInfoOperation.textContent = `${opData.score.toFixed(1)}% (Workers:${opData.workerAccess.toFixed(0)}${tileTypeData.parentZoneCategory === 'commercial' ? `, Cust:${opData.customerAccess.toFixed(0)}` : ''})`;
-            this.tileInfoSatisfaction.textContent = 'N/A';
-        } else {
-            this.tileInfoSatisfaction.textContent = 'N/A';
-            this.tileInfoOperation.textContent = 'N/A';
-        }
+        this.tileInfoPopulation.textContent = tile.population.toString();
+        this.tileInfoLevel.textContent = (tileTypeData.level || (tileTypeData.isDevelopableZone ? 0 : 'N/A')).toString();
+        this.tileInfoJobs.textContent = (tileTypeData.jobsProvided || 0).toString(); // Could be dynamic later
+
+        this.tileInfoTileValue.textContent = tile.tileValue.toFixed(1);
+        this.tileInfoPollution.textContent = tile.pollution.toFixed(1);
+        this.tileInfoRoadAccess.textContent = tile.hasRoadAccess ? 'Yes' : 'No';
+
+        // Hide fields that are not applicable
+        (this.tileInfoPopulation.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory) ? 'block' : 'none';
+        (this.tileInfoLevel.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory) ? 'block' : 'none';
+        (this.tileInfoJobs.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory === 'commercial' || tileTypeData.zoneCategory === 'industrial') ? 'block' : 'none';
     }
 
     public show(): void {

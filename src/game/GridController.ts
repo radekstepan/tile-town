@@ -9,12 +9,22 @@ export class GridController {
         this.initializeGrid();
     }
 
+    private createDefaultGridTile(tileType: TileType): GridTile {
+        return {
+            type: tileType,
+            population: 0,
+            tileValue: C.BASE_TILE_VALUE,
+            pollution: 0,
+            hasRoadAccess: false,
+        };
+    }
+
     private initializeGrid(): void {
         this.grid = [];
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             this.grid[y] = [];
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
-                this.grid[y][x] = { type: TILE_TYPES.GRASS };
+                this.grid[y][x] = this.createDefaultGridTile(TILE_TYPES.GRASS);
             }
         }
         this.generateMountains();
@@ -37,7 +47,7 @@ export class GridController {
                 const rangeSize = Math.floor(Math.random() * 15) + 10;
                 let currentMountains = 0;
                 const queue: { x: number; y: number }[] = [{x: seedX, y: seedY}];
-                this.grid[seedY][seedX].type = TILE_TYPES.MOUNTAIN;
+                this.setTileType(seedX, seedY, TILE_TYPES.MOUNTAIN); // Use setTileType to ensure proper init
                 currentMountains++;
 
                 while(queue.length > 0 && currentMountains < rangeSize) {
@@ -49,7 +59,7 @@ export class GridController {
                         const ny = curr.y + n.dy;
                         if (nx >= 0 && nx < C.GRID_SIZE_X && ny >= 0 && ny < C.GRID_SIZE_Y && this.grid[ny][nx].type === TILE_TYPES.GRASS) {
                             if (Math.random() < 0.6) {
-                                this.grid[ny][nx].type = TILE_TYPES.MOUNTAIN;
+                                this.setTileType(nx, ny, TILE_TYPES.MOUNTAIN);
                                 currentMountains++;
                                 queue.push({x: nx, y: ny});
                                 if (currentMountains >= rangeSize) break;
@@ -68,9 +78,9 @@ export class GridController {
         for (let i = 0; i < riverLength; i++) {
             if (currentY >= 0 && currentY < C.GRID_SIZE_Y && currentX >=0 && currentX < C.GRID_SIZE_X) {
                  if (this.grid[currentY][currentX].type !== TILE_TYPES.MOUNTAIN) {
-                    this.grid[currentY][currentX].type = TILE_TYPES.WATER;
-                    if (Math.random() < 0.3 && currentX + 1 < C.GRID_SIZE_X && this.grid[currentY][currentX+1].type !== TILE_TYPES.MOUNTAIN) this.grid[currentY][currentX+1].type = TILE_TYPES.WATER;
-                    if (Math.random() < 0.3 && currentX - 1 >= 0 && this.grid[currentY][currentX-1].type !== TILE_TYPES.MOUNTAIN) this.grid[currentY][currentX-1].type = TILE_TYPES.WATER;
+                    this.setTileType(currentX, currentY, TILE_TYPES.WATER);
+                    if (Math.random() < 0.3 && currentX + 1 < C.GRID_SIZE_X && this.grid[currentY][currentX+1].type !== TILE_TYPES.MOUNTAIN) this.setTileType(currentX + 1, currentY, TILE_TYPES.WATER);
+                    if (Math.random() < 0.3 && currentX - 1 >= 0 && this.grid[currentY][currentX-1].type !== TILE_TYPES.MOUNTAIN) this.setTileType(currentX - 1, currentY, TILE_TYPES.WATER);
                  }
             }
             currentY++;
@@ -126,19 +136,18 @@ export class GridController {
                     for (let y = seedY; y < seedY + clusterSizeY; y++) {
                         for (let x = seedX; x < seedX + clusterSizeX; x++) {
                             if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
-                                this.grid[y][x].type = TILE_TYPES.NATURAL_PARK;
+                                this.setTileType(x, y, TILE_TYPES.NATURAL_PARK);
                             }
                         }
                     }
                     parkPlaced = true;
-                    break; // Park placed near water, move to the next park cluster
+                    break; 
                 }
             }
 
-            // Attempt 2: Fallback to random placement if not placed near water
             if (!parkPlaced) {
                 let fallbackAttempts = 0;
-                let seedX: number = 0, seedY: number = 0; // Initialize to avoid potential unassigned error if loop doesn't run
+                let seedX: number = 0, seedY: number = 0; 
                 let foundClearSpot = false;
 
                 do {
@@ -155,7 +164,7 @@ export class GridController {
                     for (let y = seedY; y < seedY + clusterSizeY; y++) {
                         for (let x = seedX; x < seedX + clusterSizeX; x++) {
                             if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
-                                this.grid[y][x].type = TILE_TYPES.NATURAL_PARK;
+                                this.setTileType(x, y, TILE_TYPES.NATURAL_PARK);
                             }
                         }
                     }
@@ -183,15 +192,35 @@ export class GridController {
 
     public setTileType(x: number, y: number, tileType: TileType): void {
         if (this.grid[y] && this.grid[y][x]) {
-            this.grid[y][x].type = tileType;
+            // Preserve some data if it's just a level change, or reset for entirely new type
+            const oldTileData = this.grid[y][x];
+            this.grid[y][x] = {
+                ...this.createDefaultGridTile(tileType), // sets new defaults
+                // Carry over relevant data if applicable (e.g. if oldTileData.type.zoneCategory === tileType.zoneCategory)
+                // For now, we do a full reset which is safer with the new model.
+                // Specific data like population might be set by the SimulationController after a level change.
+            };
+            
+            // If it's a zone that just got placed, initialize population and level
+            if (tileType.isDevelopableZone) {
+                this.grid[y][x].population = 0;
+            } else if (tileType.zoneCategory && tileType.level === 1) { // First level building
+                 // Initial population for L1 buildings can be small, or 0 and let growth logic handle it
+                 this.grid[y][x].population = tileType.populationCapacity ? Math.floor(tileType.populationCapacity / 4) : 1;
+            }
         }
     }
     
     public clearTileData(x: number, y: number): void {
         const tile = this.getTile(x,y);
         if (tile) {
-            delete tile.satisfactionData;
-            delete tile.operationalData;
+            // Reset to defaults for a grass tile essentially
+            const grassTileDefaults = this.createDefaultGridTile(TILE_TYPES.GRASS);
+            tile.population = grassTileDefaults.population;
+            tile.tileValue = grassTileDefaults.tileValue;
+            tile.pollution = grassTileDefaults.pollution;
+            tile.hasRoadAccess = grassTileDefaults.hasRoadAccess;
+            
             if (tile.developmentTimerId) {
                 clearTimeout(tile.developmentTimerId);
                 delete tile.developmentTimerId;

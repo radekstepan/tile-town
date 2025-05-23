@@ -2,54 +2,55 @@ export interface TileType {
   id: string;
   color: string;
   name: string;
-  cost: number;
+  cost: number; // Cost to build this specific tile/zone
   renderHeight: number;
-  carryCost: number;
-  taxRate: number;
-  population: number;
-  jobsProvided: number;
+  carryCost: number; // Cost per tick for this tile type
+  
+  // For RCI buildings/levels:
+  taxRatePerPopulation?: number; // Tax generated per unit of population
+  baseTax?: number; // Flat tax if not population based
+  populationCapacity?: number;
+  jobsProvided?: number; // Can be dynamic based on population/level or fixed
+
   isNature?: boolean;
   isObstacle?: boolean;
-  isZone?: boolean;
-  developsInto?: string; // Key of another TILE_TYPE
-  category?: 'residential' | 'commercial' | 'industrial';
-  isBuilding?: boolean;
-  parentZoneCategory?: 'residential' | 'commercial' | 'industrial';
-  revertsTo?: string; // Key of another TILE_TYPE
-  visualLevel?: 'LOW' | 'MED' | 'HIGH';
+  
+  // Zoning and Development
+  isZone?: boolean; // Is it a ploppable zone?
+  isDevelopableZone?: boolean; // Is it an R, C, or I zone tile that can develop?
+  zoneCategory?: 'residential' | 'commercial' | 'industrial'; // Category if it's a zone or building
+  
+  baseTile?: string; // For buildings, what zone do they revert to if demolished (e.g. RESIDENTIAL_L1 -> RESIDENTIAL_ZONE)
+  
+  // Micropolis-style leveling
+  level?: number; // e.g., 1, 2, 3 for RCI buildings
+  developsInto?: string; // Key of TILE_TYPE for next level
+  revertsTo?: string; // Key of TILE_TYPE for previous level or abandonment
+
+  // Old properties that might be deprecated or used differently:
+  // population: number; // Now dynamic in GridTile
+  // parentZoneCategory?: 'residential' | 'commercial' | 'industrial'; // Covered by zoneCategory
+  // visualLevel?: 'LOW' | 'MED' | 'HIGH'; // Replaced by discrete levels
 }
 
 export interface TileTypeDefinition {
   [key: string]: TileType;
 }
 
-export interface SatisfactionData {
-  score: number;
-  currentTargetVisualLevel: 'LOW' | 'MED' | 'HIGH';
-  ticksInCurrentTargetLevel: number;
-  work: number;
-  nature: number;
-  density: number;
-  parkBonus: number;
-  waterBonus: number;
-  mountainBonus: number;
-  employmentPenalty: number;
-  industrialPenalty: number;
-}
-
-export interface OperationalData {
-  score: number;
-  currentTargetVisualLevel: 'LOW' | 'MED' | 'HIGH';
-  ticksInCurrentTargetLevel: number;
-  workerAccess: number;
-  customerAccess: number; // Relevant for commercial
-}
+// Removed SatisfactionData and OperationalData as they are replaced by Micropolis model
 
 export interface GridTile {
   type: TileType;
-  satisfactionData?: SatisfactionData;
-  operationalData?: OperationalData;
-  developmentTimerId?: number; // Store setTimeout ID
+  
+  // Micropolis-style dynamic data
+  population: number; // Current population for RCI zones
+  // level: number; // Level is now part of TileType, type itself changes on level up/down
+  
+  tileValue: number; // Land value / desirability score
+  pollution: number; // Pollution level at this tile
+  hasRoadAccess: boolean;
+
+  developmentTimerId?: number; // Retaining for potential timed events, though primary growth is tick-based
 }
 
 export interface Coordinates {
@@ -58,4 +59,4 @@ export interface Coordinates {
 }
 
 export type GameMode = 'pan' | 'select' | 'build';
-export type ViewMode = 'default' | 'satisfaction_heatmap';
+export type ViewMode = 'default' | 'tile_value_heatmap' | 'pollution_heatmap'; // Updated view modes
