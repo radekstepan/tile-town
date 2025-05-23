@@ -24,13 +24,71 @@ export class GridController {
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             this.grid[y] = [];
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
+                // Initialize with grass, properties will be set by setTileType or generate methods
                 this.grid[y][x] = this.createDefaultGridTile(TILE_TYPES.GRASS);
             }
         }
-        this.generateMountains();
-        this.generateWater();
-        this.generateInitialParks();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('town') === 'true') {
+            this.generateTestTownLayout();
+        } else {
+            this.generateMountains();
+            this.generateWater();
+            this.generateInitialParks();
+        }
     }
+
+    private generateTestTownLayout(): void {
+        console.log("Generating Test Town Layout...");
+        // Ensure grid is clean grass first
+        for (let y = 0; y < C.GRID_SIZE_Y; y++) {
+            for (let x = 0; x < C.GRID_SIZE_X; x++) {
+                this.setTileType(x, y, TILE_TYPES.GRASS);
+                this.clearTileData(x, y); // Resets population, etc.
+            }
+        }
+
+        const centerX = Math.floor(C.GRID_SIZE_X / 2);
+        const centerY = Math.floor(C.GRID_SIZE_Y / 2);
+
+        // Define a small RCI cluster
+        // R R R
+        // Road Road Road Road Road
+        // C C C Road I I I
+        // Road Road Road Road Road
+        // P P P
+
+        // Roads
+        for (let i = -2; i <= 2; i++) {
+            this.setTileType(centerX + i, centerY - 1, TILE_TYPES.ROAD); // Road above C/I
+            this.setTileType(centerX + i, centerY + 1, TILE_TYPES.ROAD); // Road below C/I
+        }
+        this.setTileType(centerX, centerY, TILE_TYPES.ROAD); // Central road connecting R to C/I row
+
+        // Residential (3 tiles above the main road)
+        this.setTileType(centerX - 1, centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+        this.setTileType(centerX,     centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+        this.setTileType(centerX + 1, centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+
+        // Commercial (3 tiles on the main C/I row)
+        this.setTileType(centerX - 2, centerY, TILE_TYPES.COMMERCIAL_ZONE);
+        this.setTileType(centerX - 1, centerY, TILE_TYPES.COMMERCIAL_ZONE);
+        // this.setTileType(centerX, centerY, TILE_TYPES.COMMERCIAL_ZONE); // This is a road
+
+        // Industrial (2 tiles on the main C/I row, further from R)
+        this.setTileType(centerX + 1, centerY, TILE_TYPES.INDUSTRIAL_ZONE);
+        this.setTileType(centerX + 2, centerY, TILE_TYPES.INDUSTRIAL_ZONE);
+
+        // Park (below the lower road, near residential conceptually)
+        this.setTileType(centerX -1, centerY + 2, TILE_TYPES.PARK);
+        this.setTileType(centerX,    centerY + 2, TILE_TYPES.PARK);
+        this.setTileType(centerX +1, centerY + 2, TILE_TYPES.PARK);
+
+        // Note: The simulation will need a few ticks for these zones to develop into L1 buildings.
+        // The road access flags and initial populations will be handled by the simulation controller.
+    }
+
 
     private generateMountains(): void {
         const numRanges = Math.floor(Math.random() * 2) + 1;
@@ -47,7 +105,7 @@ export class GridController {
                 const rangeSize = Math.floor(Math.random() * 15) + 10;
                 let currentMountains = 0;
                 const queue: { x: number; y: number }[] = [{x: seedX, y: seedY}];
-                this.setTileType(seedX, seedY, TILE_TYPES.MOUNTAIN); // Use setTileType to ensure proper init
+                this.setTileType(seedX, seedY, TILE_TYPES.MOUNTAIN);
                 currentMountains++;
 
                 while(queue.length > 0 && currentMountains < rangeSize) {
@@ -93,10 +151,10 @@ export class GridController {
     }
 
     private isAreaNearWater(
-        startX: number, 
-        startY: number, 
-        sizeX: number, 
-        sizeY: number, 
+        startX: number,
+        startY: number,
+        sizeX: number,
+        sizeY: number,
         proximityRadius: number
     ): boolean {
         const checkStartX = Math.max(0, startX - proximityRadius);
@@ -115,24 +173,23 @@ export class GridController {
     }
 
     private generateInitialParks(): void {
-        const numParkClusters = Math.floor(Math.random() * 10) + 10; // e.g., 10 to 19 clusters
-        const waterProximityRadius = 2; // How close to water to be considered "near"
-        const attemptsPerParkForWater = 5; // Try this many times to place a park near water
-        const fallbackMaxAttempts = 30; // Max attempts for fallback random placement
+        const numParkClusters = Math.floor(Math.random() * 10) + 10;
+        const waterProximityRadius = 2;
+        const attemptsPerParkForWater = 5;
+        const fallbackMaxAttempts = 30;
 
         for (let i = 0; i < numParkClusters; i++) {
-            const clusterSizeX = Math.floor(Math.random() * 2) + 1; // 1 or 2
-            const clusterSizeY = Math.floor(Math.random() * 2) + 1; // 1 or 2
+            const clusterSizeX = Math.floor(Math.random() * 2) + 1;
+            const clusterSizeY = Math.floor(Math.random() * 2) + 1;
             let parkPlaced = false;
 
-            // Attempt 1: Try to place near water
             for (let attempt = 0; attempt < attemptsPerParkForWater; attempt++) {
                 const seedX = Math.floor(Math.random() * (C.GRID_SIZE_X - clusterSizeX));
                 const seedY = Math.floor(Math.random() * (C.GRID_SIZE_Y - clusterSizeY));
 
                 if (this.isAreaClearForFeature(seedX, seedY, clusterSizeX, clusterSizeY, [TILE_TYPES.GRASS.id]) &&
                     this.isAreaNearWater(seedX, seedY, clusterSizeX, clusterSizeY, waterProximityRadius)) {
-                    
+
                     for (let y = seedY; y < seedY + clusterSizeY; y++) {
                         for (let x = seedX; x < seedX + clusterSizeX; x++) {
                             if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
@@ -141,13 +198,13 @@ export class GridController {
                         }
                     }
                     parkPlaced = true;
-                    break; 
+                    break;
                 }
             }
 
             if (!parkPlaced) {
                 let fallbackAttempts = 0;
-                let seedX: number = 0, seedY: number = 0; 
+                let seedX: number = 0, seedY: number = 0;
                 let foundClearSpot = false;
 
                 do {
@@ -192,39 +249,40 @@ export class GridController {
 
     public setTileType(x: number, y: number, tileType: TileType): void {
         if (this.grid[y] && this.grid[y][x]) {
-            // Preserve some data if it's just a level change, or reset for entirely new type
             const oldTileData = this.grid[y][x];
             this.grid[y][x] = {
-                ...this.createDefaultGridTile(tileType), // sets new defaults
-                // Carry over relevant data if applicable (e.g. if oldTileData.type.zoneCategory === tileType.zoneCategory)
-                // For now, we do a full reset which is safer with the new model.
-                // Specific data like population might be set by the SimulationController after a level change.
+                ...this.createDefaultGridTile(tileType),
+                // Preserve pollution and tile value if it's not a totally new placement like grass
+                pollution: (tileType.id === TILE_TYPES.GRASS.id || tileType.isObstacle) ? 0 : oldTileData.pollution,
+                tileValue: (tileType.id === TILE_TYPES.GRASS.id || tileType.isObstacle) ? C.BASE_TILE_VALUE : oldTileData.tileValue,
             };
-            
-            // If it's a zone that just got placed, initialize population and level
+
             if (tileType.isDevelopableZone) {
                 this.grid[y][x].population = 0;
-            } else if (tileType.zoneCategory && tileType.level === 1) { // First level building
-                 // Initial population for L1 buildings can be small, or 0 and let growth logic handle it
-                 this.grid[y][x].population = tileType.populationCapacity ? Math.floor(tileType.populationCapacity / 4) : 1;
+            }
+            // Initial population for L1 buildings being directly placed (e.g. by a scenario, not through simulation growth)
+            // This part is less critical now as `changeTileLevel` handles sim-driven L1 pop.
+            else if (tileType.zoneCategory && tileType.level === 1 && tileType.populationCapacity) {
+                 this.grid[y][x].population = Math.floor(tileType.populationCapacity / 2); // Start with half capacity
             }
         }
     }
-    
+
     public clearTileData(x: number, y: number): void {
         const tile = this.getTile(x,y);
         if (tile) {
-            // Reset to defaults for a grass tile essentially
             const grassTileDefaults = this.createDefaultGridTile(TILE_TYPES.GRASS);
             tile.population = grassTileDefaults.population;
-            tile.tileValue = grassTileDefaults.tileValue;
-            tile.pollution = grassTileDefaults.pollution;
+            tile.tileValue = grassTileDefaults.tileValue; // Reset tile value for cleared land
+            tile.pollution = grassTileDefaults.pollution; // Reset pollution for cleared land
             tile.hasRoadAccess = grassTileDefaults.hasRoadAccess;
-            
+
             if (tile.developmentTimerId) {
                 clearTimeout(tile.developmentTimerId);
                 delete tile.developmentTimerId;
             }
+            tile.isVisuallyStruggling = false;
+            tile.struggleTicks = 0;
         }
     }
 }
