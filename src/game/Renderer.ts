@@ -1,3 +1,4 @@
+// src/game/Renderer.ts
 import * as PIXI from 'pixi.js';
 import { GridTile, TileType, Coordinates, ViewMode } from '../types';
 import * as C from '../config/constants';
@@ -22,6 +23,8 @@ export class Renderer {
         this.heatmapContainer = new PIXI.Container();
         this.previewContainer = new PIXI.Container();
         this.hoverInfoContainer = new PIXI.Container(); 
+
+        this.tileContainer.sortableChildren = true;
 
         this.app.stage.addChild(this.tileContainer);
         this.app.stage.addChild(this.heatmapContainer);
@@ -72,71 +75,187 @@ export class Renderer {
 
     private drawPixiTileGraphics(
         graphics: PIXI.Graphics,
-        tileData: GridTile,
-        isBeingPreviewed: boolean = false 
+        tileData: GridTile, 
+        tileTypeToDisplay: TileType, 
+        isBeingPreviewed: boolean = false,
+        _gridX: number, 
+        _gridY: number  
     ): void {
-        const tileType = tileData.type;
         graphics.clear();
 
-        const TILE_HALF_WIDTH = C.TILE_HALF_WIDTH_ISO;
-        const TILE_HEIGHT = C.TILE_HEIGHT_ISO;
-        const TILE_HALF_HEIGHT = C.TILE_HALF_HEIGHT_ISO;
+        const HW = C.TILE_HALF_WIDTH_ISO; 
+        const H = C.TILE_HEIGHT_ISO;    
+        const HH = C.TILE_HALF_HEIGHT_ISO; 
 
-        const baseColorHex = tileType.color;
-        const baseColorPixi = this.hexToPixiColor(baseColorHex);
+        let featureColorHex = tileTypeToDisplay.color;
+        // Apply struggle effect to the visual color if it's a structure and struggling (and not a preview)
+        if (tileData.isVisuallyStruggling && !isBeingPreviewed && tileTypeToDisplay.renderHeight > 0.01 && !tileTypeToDisplay.isZone) {
+            featureColorHex = darkenColor(tileTypeToDisplay.color, 35);
+        }
         
-        const fillAlpha = isBeingPreviewed ? 0.5 : 1.0;
+        const baseMainFillAlpha = isBeingPreviewed ? 0.6 : 1.0;
+        const baseSideFillAlpha = isBeingPreviewed ? baseMainFillAlpha * 0.3 : 1.0; 
+        const baseOutlineAlpha = isBeingPreviewed ? baseMainFillAlpha * 0.5 : 1.0;
 
-        graphics.beginFill(baseColorPixi, fillAlpha);
+        let groundBlockColorSourceHex = tileData.type.color;
+        if (tileTypeToDisplay.id === TILE_TYPES.WATER.id && isBeingPreviewed) { // If previewing water, make "ground" also water color
+            groundBlockColorSourceHex = TILE_TYPES.WATER.color;
+        }
         
-        const outlineColorPixi = this.hexToPixiColor(darkenColor(baseColorHex, 18));
-        graphics.lineStyle(0.7, outlineColorPixi, fillAlpha);
+        // --- 1. Draw Ground Block Sides (if elevated) ---
+        if (tileData.elevation > 0) {
+            const GH = tileData.elevation * C.ELEVATION_STEP_HEIGHT; 
+            
+            const groundSideColorLight = this.hexToPixiColor(lightenColor(groundBlockColorSourceHex, 10)); 
+            const groundSideColorDark = this.hexToPixiColor(darkenColor(groundBlockColorSourceHex, 15)); 
+            const groundOutline = this.hexToPixiColor(darkenColor(groundBlockColorSourceHex, 25));
 
+            // Vertices of the top surface of the diamond base (relative to graphics object origin)
+            const T_top    = { x: 0,   y: 0 };
+            const T_left   = { x: -HW, y: HH };
+            const T_bottom = { x: 0,   y: H };
+            const T_right  = { x: HW,  y: HH };
+
+            // Corresponding vertices at the bottom of the elevated block
+            const B_top    = { x: T_top.x,    y: T_top.y + GH };
+            const B_left   = { x: T_left.x,   y: T_left.y + GH };
+            const B_bottom = { x: T_bottom.x, y: T_bottom.y + GH };
+            const B_right  = { x: T_right.x,  y: T_right.y + GH };
+
+            // Back-Left Face
+            graphics.lineStyle(0.5, groundOutline, baseOutlineAlpha);
+            graphics.beginFill(groundSideColorLight, baseSideFillAlpha);
+            graphics.moveTo(T_top.x, T_top.y);
+            graphics.lineTo(T_left.x, T_left.y);
+            graphics.lineTo(B_left.x, B_left.y);
+            graphics.lineTo(B_top.x, B_top.y);
+            graphics.closePath();
+            graphics.endFill();
+
+            // Back-Right Face
+            graphics.lineStyle(0.5, groundOutline, baseOutlineAlpha);
+            graphics.beginFill(groundSideColorDark, baseSideFillAlpha);
+            graphics.moveTo(T_top.x, T_top.y);
+            graphics.lineTo(T_right.x, T_right.y);
+            graphics.lineTo(B_right.x, B_right.y);
+            graphics.lineTo(B_top.x, B_top.y);
+            graphics.closePath();
+            graphics.endFill();
+            
+            // Front-Left Face
+            graphics.lineStyle(0.5, groundOutline, baseOutlineAlpha);
+            graphics.beginFill(groundSideColorLight, baseSideFillAlpha);
+            graphics.moveTo(T_left.x, T_left.y);
+            graphics.lineTo(T_bottom.x, T_bottom.y);
+            graphics.lineTo(B_bottom.x, B_bottom.y);
+            graphics.lineTo(B_left.x, B_left.y);
+            graphics.closePath();
+            graphics.endFill();
+            
+            // Front-Right Face
+            graphics.lineStyle(0.5, groundOutline, baseOutlineAlpha);
+            graphics.beginFill(groundSideColorDark, baseSideFillAlpha);
+            graphics.moveTo(T_right.x, T_right.y);
+            graphics.lineTo(T_bottom.x, T_bottom.y);
+            graphics.lineTo(B_bottom.x, B_bottom.y);
+            graphics.lineTo(B_right.x, B_right.y);
+            graphics.closePath();
+            graphics.endFill();
+        }
+
+        // --- 2. Draw Top Surface of Ground/Feature ---
+        let topSurfaceColorSourceHex = featureColorHex; // Default to the color of the item being displayed
+        // If the item being displayed is a tall structure (not water, not zone), 
+        // then the diamond base underneath it should use the *actual* ground tile's color.
+        if (tileTypeToDisplay.renderHeight > 0.01 && !tileTypeToDisplay.isZone && tileTypeToDisplay.id !== TILE_TYPES.WATER.id) {
+             topSurfaceColorSourceHex = tileData.type.color; 
+        }
+        // Ensure Mountain and Water tops always use their own feature color
+        else if (tileTypeToDisplay.id === TILE_TYPES.MOUNTAIN.id || tileTypeToDisplay.id === TILE_TYPES.WATER.id) {
+            topSurfaceColorSourceHex = featureColorHex; 
+        }
+
+        const topSurfacePixiColor = this.hexToPixiColor(topSurfaceColorSourceHex);
+        const topSurfaceOutlinePixiColor = this.hexToPixiColor(darkenColor(topSurfaceColorSourceHex, 18));
+
+        graphics.beginFill(topSurfacePixiColor, baseMainFillAlpha);
+        graphics.lineStyle(0.7, topSurfaceOutlinePixiColor, baseOutlineAlpha); 
         graphics.moveTo(0, 0); 
-        graphics.lineTo(TILE_HALF_WIDTH, TILE_HALF_HEIGHT); 
-        graphics.lineTo(0, TILE_HEIGHT); 
-        graphics.lineTo(-TILE_HALF_WIDTH, TILE_HALF_HEIGHT); 
+        graphics.lineTo(HW, HH); 
+        graphics.lineTo(0, H); 
+        graphics.lineTo(-HW, HH); 
         graphics.closePath();
         graphics.endFill();
 
-        // Removed grass texture drawing logic
+        // --- 3. Draw Structure on top (if it has height and is not water/zone) ---
+        if (tileTypeToDisplay.renderHeight && tileTypeToDisplay.renderHeight > 0.01 && !tileTypeToDisplay.isZone && tileTypeToDisplay.id !== TILE_TYPES.WATER.id) { 
+            const buildingColorHexForStructure = featureColorHex; // This already includes struggle effect
+            const BH = tileTypeToDisplay.renderHeight * C.TILE_DEPTH_UNIT; // BuildingHeight
 
-        if (tileType.renderHeight && tileType.renderHeight > 0.001) {
-            const isStruggling = tileData.isVisuallyStruggling === true;
-            let buildingColorHex = tileType.color;
-            if (isStruggling && !isBeingPreviewed) {
-                buildingColorHex = darkenColor(tileType.color, 35);
-            }
-
-            const buildingVisualHeight = tileType.renderHeight * C.TILE_DEPTH_UNIT;
-            const topColorPixi = this.hexToPixiColor(lightenColor(buildingColorHex, 15));
-            const sideColorDarkPixi = this.hexToPixiColor(darkenColor(buildingColorHex, 15));
-            const sideColorLightPixi = this.hexToPixiColor(darkenColor(buildingColorHex, 5));
+            const structTopColorPixi = this.hexToPixiColor(lightenColor(buildingColorHexForStructure, 12));
+            const structSideLightPixi = this.hexToPixiColor(lightenColor(buildingColorHexForStructure, 5));  
+            const structSideDarkPixi = this.hexToPixiColor(darkenColor(buildingColorHexForStructure, 12)); 
+            const structOutlinePixiColor = this.hexToPixiColor(darkenColor(buildingColorHexForStructure, 20));
             
-            const buildingOutlineColorPixi = this.hexToPixiColor(darkenColor(buildingColorHex, 25));
-            graphics.lineStyle(1, buildingOutlineColorPixi, fillAlpha);
+            // Vertices for the base of the structure (same as ground top surface)
+            const S_base_top    = { x: 0,   y: 0 };
+            const S_base_left   = { x: -HW, y: HH };
+            const S_base_bottom = { x: 0,   y: H };
+            const S_base_right  = { x: HW,  y: HH };
 
-            graphics.beginFill(sideColorDarkPixi, fillAlpha);
-            graphics.moveTo(TILE_HALF_WIDTH, TILE_HALF_HEIGHT);
-            graphics.lineTo(TILE_HALF_WIDTH, TILE_HALF_HEIGHT - buildingVisualHeight);
-            graphics.lineTo(0, -buildingVisualHeight);
-            graphics.lineTo(0, 0);
+            // Vertices for the top of the structure (projected upwards by BH)
+            const S_top_top    = { x: S_base_top.x,    y: S_base_top.y - BH };
+            const S_top_left   = { x: S_base_left.x,   y: S_base_left.y - BH };
+            const S_top_bottom = { x: S_base_bottom.x, y: S_base_bottom.y - BH };
+            const S_top_right  = { x: S_base_right.x,  y: S_base_right.y - BH };
+            
+            // Structure's Back-Left Face
+            graphics.lineStyle(0.5, structOutlinePixiColor, baseOutlineAlpha);
+            graphics.beginFill(structSideLightPixi, baseSideFillAlpha);
+            graphics.moveTo(S_base_top.x, S_base_top.y);
+            graphics.lineTo(S_base_left.x, S_base_left.y);
+            graphics.lineTo(S_top_left.x, S_top_left.y);
+            graphics.lineTo(S_top_top.x, S_top_top.y);
+            graphics.closePath();
+            graphics.endFill();
+            
+            // Structure's Back-Right Face
+            graphics.lineStyle(0.5, structOutlinePixiColor, baseOutlineAlpha);
+            graphics.beginFill(structSideDarkPixi, baseSideFillAlpha); 
+            graphics.moveTo(S_base_top.x, S_base_top.y);
+            graphics.lineTo(S_base_right.x, S_base_right.y);
+            graphics.lineTo(S_top_right.x, S_top_right.y);
+            graphics.lineTo(S_top_top.x, S_top_top.y);   
             graphics.closePath();
             graphics.endFill();
 
-            graphics.beginFill(sideColorLightPixi, fillAlpha);
-            graphics.moveTo(-TILE_HALF_WIDTH, TILE_HALF_HEIGHT);
-            graphics.lineTo(-TILE_HALF_WIDTH, TILE_HALF_HEIGHT - buildingVisualHeight);
-            graphics.lineTo(0, -buildingVisualHeight);
-            graphics.lineTo(0, 0);
+            // Structure's Front-Left Face
+            graphics.lineStyle(0.5, structOutlinePixiColor, baseOutlineAlpha);
+            graphics.beginFill(structSideLightPixi, baseSideFillAlpha);
+            graphics.moveTo(S_base_left.x, S_base_left.y);
+            graphics.lineTo(S_base_bottom.x, S_base_bottom.y);
+            graphics.lineTo(S_top_bottom.x, S_top_bottom.y);
+            graphics.lineTo(S_top_left.x, S_top_left.y);
+            graphics.closePath();
+            graphics.endFill();
+
+            // Structure's Front-Right Face
+            graphics.lineStyle(0.5, structOutlinePixiColor, baseOutlineAlpha);
+            graphics.beginFill(structSideDarkPixi, baseSideFillAlpha);
+            graphics.moveTo(S_base_right.x, S_base_right.y);
+            graphics.lineTo(S_base_bottom.x, S_base_bottom.y);
+            graphics.lineTo(S_top_bottom.x, S_top_bottom.y);
+            graphics.lineTo(S_top_right.x, S_top_right.y);
             graphics.closePath();
             graphics.endFill();
             
-            graphics.beginFill(topColorPixi, fillAlpha);
-            graphics.moveTo(0, -buildingVisualHeight);
-            graphics.lineTo(TILE_HALF_WIDTH, TILE_HALF_HEIGHT - buildingVisualHeight);
-            graphics.lineTo(0, TILE_HEIGHT - buildingVisualHeight);
-            graphics.lineTo(-TILE_HALF_WIDTH, TILE_HALF_HEIGHT - buildingVisualHeight);
+            // Structure's Top face
+            graphics.lineStyle(0.7, structOutlinePixiColor, baseOutlineAlpha);
+            graphics.beginFill(structTopColorPixi, baseMainFillAlpha); 
+            graphics.moveTo(S_top_top.x, S_top_top.y); 
+            graphics.lineTo(S_top_right.x, S_top_right.y); 
+            graphics.lineTo(S_top_bottom.x, S_top_bottom.y); 
+            graphics.lineTo(S_top_left.x, S_top_left.y); 
             graphics.closePath();
             graphics.endFill();
         }
@@ -150,7 +269,7 @@ export class Renderer {
         currentViewMode: ViewMode,
         hoveredTileForInfo: Coordinates | null 
     ): void {
-        this.tileContainer.removeChildren();
+        this.tileContainer.removeChildren(); 
         this.heatmapContainer.removeChildren();
         this.previewContainer.removeChildren();
         this.hoverInfoContainer.removeChildren(); 
@@ -169,11 +288,15 @@ export class Renderer {
 
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
-                const tileGraphics = new PIXI.Graphics();
-                tileGraphics.x = (x - y) * C.TILE_HALF_WIDTH_ISO;
-                tileGraphics.y = (x + y) * C.TILE_HALF_HEIGHT_ISO;
+                const tileData = gridData[y][x];
+                const tileGraphics = new PIXI.Graphics(); 
                 
-                this.drawPixiTileGraphics(tileGraphics, gridData[y][x], false); 
+                tileGraphics.x = (x - y) * C.TILE_HALF_WIDTH_ISO;
+                tileGraphics.y = (x + y) * C.TILE_HALF_HEIGHT_ISO - (tileData.elevation * C.ELEVATION_STEP_HEIGHT);
+                
+                tileGraphics.zIndex = tileGraphics.y + (tileData.elevation * C.ELEVATION_STEP_HEIGHT);
+
+                this.drawPixiTileGraphics(tileGraphics, tileData, tileData.type, false, x, y); 
                 this.tileContainer.addChild(tileGraphics);
             }
         }
@@ -181,6 +304,7 @@ export class Renderer {
         if (currentViewMode === 'tile_value_heatmap' || currentViewMode === 'pollution_heatmap') {
             for (let yLoc = 0; yLoc < C.GRID_SIZE_Y; yLoc++) { 
                 for (let xLoc = 0; xLoc < C.GRID_SIZE_X; xLoc++) { 
+                    const tileDataForHeatmap = gridData[yLoc][xLoc];
                     const value = (currentViewMode === 'tile_value_heatmap')
                         ? game.simulationController.getTileValueAt(xLoc,yLoc)
                         : game.simulationController.getPollutionAt(xLoc,yLoc);
@@ -202,7 +326,7 @@ export class Renderer {
 
                             const heatmapCellGraphics = new PIXI.Graphics();
                             heatmapCellGraphics.x = (xLoc - yLoc) * C.TILE_HALF_WIDTH_ISO;
-                            heatmapCellGraphics.y = (xLoc + yLoc) * C.TILE_HALF_HEIGHT_ISO;
+                            heatmapCellGraphics.y = (xLoc + yLoc) * C.TILE_HALF_HEIGHT_ISO - (tileDataForHeatmap.elevation * C.ELEVATION_STEP_HEIGHT);
                             
                             heatmapCellGraphics.beginFill(pixiColor, alpha_val);
                             heatmapCellGraphics.moveTo(0, 0);
@@ -247,11 +371,12 @@ export class Renderer {
 
 
                     const tileScreenX = (hoveredTileForInfo.x - hoveredTileForInfo.y) * C.TILE_HALF_WIDTH_ISO;
-                    const tileScreenY = (hoveredTileForInfo.x + hoveredTileForInfo.y) * C.TILE_HALF_HEIGHT_ISO;
-                    const buildingVisualHeight = (tile.type.renderHeight || 0) * C.TILE_DEPTH_UNIT;
+                    const tileScreenYBase = (hoveredTileForInfo.x + hoveredTileForInfo.y) * C.TILE_HALF_HEIGHT_ISO - (tile.elevation * C.ELEVATION_STEP_HEIGHT);
+                    
+                    const structureVisualHeight = (tile.type.renderHeight || 0) * C.TILE_DEPTH_UNIT;
                     
                     pixiText.x = tileScreenX;
-                    pixiText.y = tileScreenY - (C.TILE_HALF_HEIGHT_ISO / 2) - buildingVisualHeight - 8; 
+                    pixiText.y = tileScreenYBase - structureVisualHeight - 8; 
                     pixiText.anchor.set(0.5, 1); 
 
                     this.hoverInfoContainer.addChild(pixiText);
@@ -260,21 +385,15 @@ export class Renderer {
         }
 
         if (currentBuildTypeForPreview && hoveredTileForPreview && currentViewMode === 'default') {
-            const previewTileData: GridTile = {
-                type: currentBuildTypeForPreview,
-                population: 0,
-                tileValue: C.BASE_TILE_VALUE,
-                pollution: 0,
-                hasRoadAccess: false,
-                isVisuallyStruggling: false,
-                struggleTicks: 0
-            };
-            const previewGraphics = new PIXI.Graphics();
-            previewGraphics.x = (hoveredTileForPreview.x - hoveredTileForPreview.y) * C.TILE_HALF_WIDTH_ISO;
-            previewGraphics.y = (hoveredTileForPreview.x + hoveredTileForPreview.y) * C.TILE_HALF_HEIGHT_ISO;
-            
-            this.drawPixiTileGraphics(previewGraphics, previewTileData, true); 
-            this.previewContainer.addChild(previewGraphics);
+            const actualGridTileBelowPreview = gridData[hoveredTileForPreview.y]?.[hoveredTileForPreview.x];
+            if (actualGridTileBelowPreview) { 
+                const previewGraphics = new PIXI.Graphics();
+                previewGraphics.x = (hoveredTileForPreview.x - hoveredTileForPreview.y) * C.TILE_HALF_WIDTH_ISO;
+                previewGraphics.y = (hoveredTileForPreview.x + hoveredTileForPreview.y) * C.TILE_HALF_HEIGHT_ISO - (actualGridTileBelowPreview.elevation * C.ELEVATION_STEP_HEIGHT);
+                
+                this.drawPixiTileGraphics(previewGraphics, actualGridTileBelowPreview, currentBuildTypeForPreview, true, hoveredTileForPreview.x, hoveredTileForPreview.y); 
+                this.previewContainer.addChild(previewGraphics);
+            }
         }
     }
 }

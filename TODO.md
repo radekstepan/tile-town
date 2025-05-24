@@ -1,4 +1,6 @@
 - efficiency show in blue in the info pane unlike the other fields
+- do not show preview of a tile if we are hovering over a mountain
+- do not place initial road by city hall, it has a carry cost so we start losing money straight away
 
 - Genrate a map based on a seed I can reuse; seed=true should show a seed and I should be able to put it somewhere seed=VALUE
 - Web Workers - Offload heavy calculations to background threads

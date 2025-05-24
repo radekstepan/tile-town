@@ -1,3 +1,4 @@
+// src/types/index.ts
 export interface TileType {
   id: string;
   color: string;
@@ -41,6 +42,7 @@ export interface TileTypeDefinition {
 
 export interface GridTile {
   type: TileType;
+  elevation: number; // New: For terrain height
   
   // Micropolis-style dynamic data
   population: number; // Current population for RCI zones

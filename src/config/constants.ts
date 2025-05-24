@@ -1,3 +1,4 @@
+// src/config/constants.ts
 // Gameplay Balance - Micropolis Inspired
 export const MAX_TILE_VALUE = 255; // Max land value
 export const MAX_POLLUTION = 255;  // Max pollution value
@@ -95,8 +96,14 @@ export const TILE_WIDTH_ISO = 64;
 export const TILE_HEIGHT_ISO = TILE_WIDTH_ISO / 2;
 export const TILE_HALF_WIDTH_ISO = TILE_WIDTH_ISO / 2;
 export const TILE_HALF_HEIGHT_ISO = TILE_HEIGHT_ISO / 2;
-export const TILE_DEPTH_UNIT = TILE_HEIGHT_ISO * 0.75;
+export const TILE_DEPTH_UNIT = TILE_HEIGHT_ISO * 0.75; // Visual height of one unit of renderHeight for structures
 export const GAME_TICK_INTERVAL = 2000; 
 export const TEST_GAME_TICK_INTERVAL = 10;
 
 export const INITIAL_BUDGET = 3000;
+
+// New Hill/Elevation Constants
+export const DEFAULT_ELEVATION = 0;
+export const MAX_ELEVATION_LEVEL = 4; // Max units of elevation
+export const ELEVATION_STEP_HEIGHT = TILE_HALF_HEIGHT_ISO * 0.5; // Visual Y shift per elevation unit
+export const SLOPE_COST_FACTOR = 0.25; // 25% extra cost per unit of max elevation difference with neighbors

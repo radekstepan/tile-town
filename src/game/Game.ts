@@ -1,3 +1,4 @@
+// src/game/Game.ts
 import * as PIXI from 'pixi.js';
 import { TILE_TYPES } from '../config/tileTypes';
 import * as C from '../config/constants';
@@ -84,7 +85,7 @@ export class Game {
             this.app = dependencies.pixiApplication || new PIXI.Application({
                 width: window.innerWidth,
                 height: window.innerHeight,
-                backgroundColor: 0x72a372, 
+                backgroundColor: 0x72a372, // Default grass color, or a neutral sky color
                 antialias: true, 
             });
             this.canvasElement = this.app.view as HTMLCanvasElement; 
@@ -218,9 +219,9 @@ export class Game {
             needsRedrawForBuildPreviewOrHoverInfo = true;
         }
         
-        this.updateHoveredTileDisplay(this.hoveredTile); // This itself might trigger a redraw
+        this.updateHoveredTileDisplay(this.hoveredTile); 
 
-        if (needsRedrawForBuildPreviewOrHoverInfo && !this.hoveredTile) { // Only force redraw if hover update didn't
+        if (needsRedrawForBuildPreviewOrHoverInfo && !this.hoveredTile) {
             this.drawGame();
         }
     }
@@ -239,7 +240,7 @@ export class Game {
         this.messageBox.show(`${modeName} view active.`, 2000);
         
         this.updateHoveredTileDisplay(this.hoveredTile); 
-        if (oldViewMode !== newMode) { // Redraw if view mode actually changed visual output
+        if (oldViewMode !== newMode) { 
             this.drawGame();
         }
     }
@@ -261,9 +262,27 @@ export class Game {
         if (this.isHeadless || !this.app || !this.app.renderer || typeof window === 'undefined') return;
         this.app.renderer.resize(window.innerWidth, window.innerHeight);
         
-        const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO;
+        // Center camera considering average elevation to keep visual center somewhat stable
+        // This is a rough estimate; perfect centering with dynamic elevation is complex.
+        let avgElevation = 0;
+        // let tileCount = 0;
+        // for (let y = 0; y < C.GRID_SIZE_Y; y++) {
+        //     for (let x = 0; x < C.GRID_SIZE_X; x++) {
+        //         const tile = this.gridController.getTile(x,y);
+        //         if(tile) {
+        //             avgElevation += tile.elevation;
+        //             tileCount++;
+        //         }
+        //     }
+        // }
+        // if (tileCount > 0) avgElevation /= tileCount;
+        // For simplicity, let's use a fixed offset or a smaller portion of MAX_ELEVATION
+        avgElevation = C.MAX_ELEVATION_LEVEL / 3;
+
+
+        const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO - (avgElevation * C.ELEVATION_STEP_HEIGHT * C.GRID_SIZE_Y * 0.5);
         this.cameraOffsetX = this.app.screen.width / 2 - (C.GRID_SIZE_X - C.GRID_SIZE_Y) * C.TILE_HALF_WIDTH_ISO / 2;
-        this.cameraOffsetY = this.app.screen.height / 2 - gridPixelHeight / 2;
+        this.cameraOffsetY = this.app.screen.height / 2 - gridPixelHeight / 2 + (C.MAX_ELEVATION_LEVEL * C.ELEVATION_STEP_HEIGHT)/2; // Try to keep center mass around screen center
         
         this.setCanvasCursor();
     }
@@ -276,7 +295,7 @@ export class Game {
             (this.currentMode === 'build' && this.currentViewMode === 'default' && this.currentBuildType) ? this.hoveredTile : null,
             this.currentBuildType,
             this.currentViewMode,
-            this.hoveredTile // Pass general hovered tile for info avatar
+            this.hoveredTile 
         );
     }
     
@@ -293,7 +312,6 @@ export class Game {
         let needsCanvasRedraw = false;
         const oldHoveredTile = this.hoveredTile;
         
-        // Check if hover status for build preview changed
         const shouldShowBuildPreviewNow = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
         const wasShowingBuildPreview = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType && !!oldHoveredTile;
 
@@ -301,10 +319,8 @@ export class Game {
             needsCanvasRedraw = true;
         }
 
-        // Check if hover status for info avatar changed (tile itself or view mode affecting visibility)
         const shouldShowInfoAvatarNow = !!coords && this.currentViewMode === 'default';
         const wasShowingInfoAvatar = !!oldHoveredTile && this.currentViewMode === 'default'; 
-                                     // (assuming view mode didn't change in *this exact* call, but Game.setViewMode handles that redraw)
         
         if (shouldShowInfoAvatarNow !== wasShowingInfoAvatar || (shouldShowInfoAvatarNow && (oldHoveredTile?.x !== coords?.x || oldHoveredTile?.y !== coords?.y))) {
              needsCanvasRedraw = true;
@@ -363,19 +379,55 @@ export class Game {
             return false;
         }
 
+        // Calculate actual cost considering slope
+        let actualCost = selectedTool.cost;
+        let slopeMessagePart = "";
+
+        if (selectedTool.id !== TILE_TYPES.GRASS.id) { // Don't apply slope cost to bulldozing
+            let maxAbsElevationDifference = 0;
+            const neighbors = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+            for (const offset of neighbors) {
+                const nx = gridX + offset.dx;
+                const ny = gridY + offset.dy;
+                const neighborTile = this.gridController.getTile(nx, ny);
+                if (neighborTile) {
+                    // Only consider difference if neighbor is not water (unless current is also water)
+                    // or if neighbor is not an obstacle (unless current is also obstacle - though this case is blocked above)
+                    if ( (neighborTile.type.id !== TILE_TYPES.WATER.id || selectedTool.id === TILE_TYPES.WATER.id) && !neighborTile.type.isObstacle) {
+                        const diff = Math.abs(tileData.elevation - neighborTile.elevation);
+                        if (diff > maxAbsElevationDifference) {
+                            maxAbsElevationDifference = diff;
+                        }
+                    }
+                }
+            }
+            if (maxAbsElevationDifference > 0) {
+                const slopePenalty = selectedTool.cost * maxAbsElevationDifference * C.SLOPE_COST_FACTOR;
+                actualCost += slopePenalty;
+                actualCost = Math.round(actualCost);
+                if (slopePenalty > 0) {
+                    slopeMessagePart = ` (slope +$${slopePenalty.toFixed(0)})`;
+                }
+            }
+        }
+
+
         if (selectedTool.id === TILE_TYPES.GRASS.id) { 
             if (tileData.type.id !== TILE_TYPES.GRASS.id) { 
-                if (this.playerBudget < C.BULLDOZE_COST && oldTileType.id !== TILE_TYPES.ROAD.id) { 
-                     this.messageBox.show(`Not enough funds to bulldoze. Cost: $${C.BULLDOZE_COST}`, 2000);
+                // Bulldoze cost is flat, not affected by slope for removal
+                const bulldozeCost = (oldTileType.id === TILE_TYPES.ROAD.id) ? 0 : C.BULLDOZE_COST;
+                if (this.playerBudget < bulldozeCost ) { 
+                     this.messageBox.show(`Not enough funds to bulldoze. Cost: $${bulldozeCost}`, 2000);
                      return false;
                 }
-                if (oldTileType.id !== TILE_TYPES.ROAD.id) { 
-                    this.playerBudget -= C.BULLDOZE_COST;
-                }
+                this.playerBudget -= bulldozeCost;
 
                 this.messageBox.show(`Cleared ${tileData.type.name}.`, 1500);
+                // Preserve elevation when clearing to grass
+                const currentElevation = tileData.elevation;
                 this.gridController.clearTileData(gridX, gridY); 
                 this.gridController.setTileType(gridX, gridY, TILE_TYPES.GRASS);
+                tileData.elevation = currentElevation; // Re-apply elevation after setType potentially resets it based on default
                 
                 this.updateAllUI(); 
                 this.drawGame();
@@ -387,24 +439,27 @@ export class Game {
         if (tileData.type.id === TILE_TYPES.GRASS.id || 
             (!tileData.type.isObstacle && tileData.type.id !== selectedTool.id)) { 
             
-            if (this.playerBudget >= selectedTool.cost) {
+            if (this.playerBudget >= actualCost) {
                 let messageAction = tileData.type.id === TILE_TYPES.GRASS.id ? "Built" : "Replaced";
                 let oldTypeName = tileData.type.name;
 
-                this.playerBudget -= selectedTool.cost;
+                this.playerBudget -= actualCost;
                 
+                const currentElevation = tileData.elevation; // Preserve elevation
                 if (messageAction === "Replaced") {
-                     this.gridController.clearTileData(gridX, gridY);
+                     this.gridController.clearTileData(gridX, gridY); // clearTileData preserves elevation
                 }
                 this.gridController.setTileType(gridX, gridY, selectedTool);
+                // Ensure elevation is preserved after setTileType if it defaults to 0 for the new type
+                this.gridController.getTile(gridX, gridY)!.elevation = currentElevation; 
                 
-                this.messageBox.show(`${messageAction} ${oldTypeName && messageAction === "Replaced" ? oldTypeName : ""} with ${selectedTool.name} for $${selectedTool.cost}`.replace("  ", " "), 2500);
+                this.messageBox.show(`${messageAction} ${oldTypeName && messageAction === "Replaced" ? oldTypeName : ""} with ${selectedTool.name} for $${actualCost}${slopeMessagePart}`.replace("  ", " "), 2500);
                 
                 this.updateAllUI(); 
                 this.drawGame();
                 return true;
             } else {
-                this.messageBox.show(`Not enough funds for ${selectedTool.name}. Cost: $${selectedTool.cost}. Budget: $${this.playerBudget.toFixed(0)}`, 2500);
+                this.messageBox.show(`Not enough funds for ${selectedTool.name}. Cost: $${actualCost}${slopeMessagePart}. Budget: $${this.playerBudget.toFixed(0)}`, 2500);
                 return false;
             }
         }
@@ -414,17 +469,16 @@ export class Game {
 
     private startGameLoop(): void {
         if (this.gameTickIntervalId) {
-            clearInterval(this.gameTickIntervalId as any); // Cast to any if types conflict
+            clearInterval(this.gameTickIntervalId as any);
         }
         const interval = (this.isHeadless || typeof window === 'undefined') ? C.TEST_GAME_TICK_INTERVAL : C.GAME_TICK_INTERVAL;
         
-        // Use globalThis for universal access to setInterval/clearInterval
         this.gameTickIntervalId = globalThis.setInterval(() => this.gameTick(), interval);
     }
     
     public stopGameLoop(): void { 
         if (this.gameTickIntervalId) {
-            globalThis.clearInterval(this.gameTickIntervalId as any); // Cast to any
+            globalThis.clearInterval(this.gameTickIntervalId as any);
             this.gameTickIntervalId = null;
         }
     }
