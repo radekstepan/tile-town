@@ -32,37 +32,39 @@ export class Renderer {
     private getHeatmapColor(value: number, maxValue: number, type: 'positive' | 'negative'): string | null {
         if (maxValue <= 0) return null;
 
-        // Lower the threshold for not drawing, to catch fainter pollution
-        // For 'positive' type (used for both tile value and pollution now):
-        // value < 0.5 means don't draw extremely low values. This ensures that "almost zero" is not drawn.
-        // This threshold can be tuned. If 0.5 is too high and hides faint pollution, try 0.1 or 0.01.
-        if (value < 0.5) { // Adjusted threshold
-             return null;
-        }
+        let r: number, g: number, b: number = 0;
+        let alpha: number;
 
-        const normalizedValue = Math.min(Math.max(value, 0) / maxValue, 1);
-        
-        // Adjusted alpha for better visual decay: starts a bit more opaque, full range.
-        const alpha = 0.2 + normalizedValue * 0.5; // Range 0.2 to 0.7
+        if (type === 'positive') { // Tile Value: Red (low value) -> Yellow (mid) -> Green (high value)
+            // For tile value, always calculate and show a color, even if value is 0.
+            const normalizedValue = Math.min(Math.max(value, 0) / maxValue, 1);
+            alpha = 0.2 + normalizedValue * 0.5; 
 
-        if (type === 'positive') { // Red (low value on scale) -> Yellow (mid) -> Green (high value on scale)
-            let r, g, b;
-            if (normalizedValue < 0.5) { // Red to Yellow
+            if (normalizedValue < 0.5) { 
                 r = 255;
                 g = Math.floor(normalizedValue * 2 * 255);
                 b = 0;
-            } else { // Yellow to Green
+            } else { 
                 r = Math.floor(255 - (normalizedValue - 0.5) * 2 * 255);
                 g = 255;
                 b = 0;
             }
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 
-        } else { // 'negative' type: Green (low value on scale) -> Yellow (mid) -> Red (high value on scale)
-            // This 'negative' branch is effectively not used if both heatmaps use 'positive'
-            const r = Math.floor(255 * normalizedValue); 
-            const g = Math.floor(255 * (1 - normalizedValue)); 
-            return `rgba(${r}, ${g}, 0, ${alpha})`;
+        } else { // 'negative' type (Pollution): Low pollution = Yellow, Mid = Orange, High = Red
+            // If pollution is effectively zero, don't draw an overlay.
+            if (value < 0.1) { // Threshold for "no pollution" to display
+                return null;
+            }
+
+            const normalizedValue = Math.min(Math.max(value, 0) / maxValue, 1);
+            alpha = 0.2 + normalizedValue * 0.5; 
+            
+            r = 255; 
+            g = Math.floor((1 - normalizedValue) * 255); 
+            b = 0; 
+            
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         }
     }
 
@@ -168,8 +170,8 @@ export class Renderer {
         }
 
         if (currentViewMode === 'tile_value_heatmap' || currentViewMode === 'pollution_heatmap') {
-            for (let yLoc = 0; yLoc < C.GRID_SIZE_Y; yLoc++) { // Renamed y to yLoc to avoid conflict
-                for (let xLoc = 0; xLoc < C.GRID_SIZE_X; xLoc++) { // Renamed x to xLoc
+            for (let yLoc = 0; yLoc < C.GRID_SIZE_Y; yLoc++) { 
+                for (let xLoc = 0; xLoc < C.GRID_SIZE_X; xLoc++) { 
                     const value = (currentViewMode === 'tile_value_heatmap')
                         ? game.simulationController.getTileValueAt(xLoc,yLoc)
                         : game.simulationController.getPollutionAt(xLoc,yLoc);
@@ -177,23 +179,23 @@ export class Renderer {
                         ? C.MAX_TILE_VALUE
                         : C.MAX_POLLUTION;
                     
-                    const heatmapType = 'positive';
+                    const heatmapType = (currentViewMode === 'pollution_heatmap') ? 'negative' : 'positive';
                     const colorString = this.getHeatmapColor(value, maxValue, heatmapType);
 
-                    if (colorString) {
+                    if (colorString) { 
                         const match = colorString.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
                         if (match) {
-                            const r = parseInt(match[1]);
+                            const r_val = parseInt(match[1]);
                             const gVal = parseInt(match[2]);
-                            const b = parseInt(match[3]);
-                            const alpha = parseFloat(match[4]);
-                            const pixiColor = (r << 16) + (gVal << 8) + b;
+                            const b_val = parseInt(match[3]);
+                            const alpha_val = parseFloat(match[4]);
+                            const pixiColor = (r_val << 16) + (gVal << 8) + b_val;
 
                             const heatmapCellGraphics = new PIXI.Graphics();
                             heatmapCellGraphics.x = (xLoc - yLoc) * C.TILE_HALF_WIDTH_ISO;
                             heatmapCellGraphics.y = (xLoc + yLoc) * C.TILE_HALF_HEIGHT_ISO;
                             
-                            heatmapCellGraphics.beginFill(pixiColor, alpha);
+                            heatmapCellGraphics.beginFill(pixiColor, alpha_val);
                             heatmapCellGraphics.moveTo(0, 0);
                             heatmapCellGraphics.lineTo(C.TILE_HALF_WIDTH_ISO, C.TILE_HALF_HEIGHT_ISO);
                             heatmapCellGraphics.lineTo(0, C.TILE_HEIGHT_ISO);

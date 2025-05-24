@@ -81,11 +81,8 @@ export class TileInfoPane {
         this.tileInfoPollution.textContent = tile.pollution.toFixed(1);
         this.tileInfoRoadAccess.textContent = tile.hasRoadAccess ? 'Yes' : 'No';
 
-        if (tileTypeData.zoneCategory === 'residential' && tileTypeData.level) {
-            this.healthMetricContainer.style.display = 'block';
-            this.tileInfoHealthMetricLabel.textContent = 'Desirability:';
-            this.tileInfoHealthMetricValue.textContent = tile.tileValue.toFixed(1);
-        } else if ((tileTypeData.zoneCategory === 'commercial' || tileTypeData.zoneCategory === 'industrial') && tileTypeData.level && tileTypeData.populationCapacity) {
+        // Show Efficiency for Commercial/Industrial, otherwise hide the healthMetricContainer
+        if ((tileTypeData.zoneCategory === 'commercial' || tileTypeData.zoneCategory === 'industrial') && tileTypeData.level && tileTypeData.populationCapacity) {
             this.healthMetricContainer.style.display = 'block';
             this.tileInfoHealthMetricLabel.textContent = 'Efficiency:';
             const efficiency = tileTypeData.populationCapacity > 0 ? (tile.population / tileTypeData.populationCapacity * 100) : 0;
@@ -97,7 +94,12 @@ export class TileInfoPane {
         (this.tileInfoPopulation.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory) ? 'block' : 'none';
         (this.tileInfoLevel.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory) ? 'block' : 'none';
         (this.tileInfoJobs.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory === 'commercial' || tileTypeData.zoneCategory === 'industrial') ? 'block' : 'none';
-        (this.tileInfoTileValue.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory || tileTypeData.isDevelopableZone) ? 'block' : 'none'; 
+        
+        // Make Tile Value always visible
+        (this.tileInfoTileValue.parentElement as HTMLElement).style.display = 'block'; 
+        
+        // Keep Pollution visibility conditional for now, as it might not apply to all non-zone tiles meaningfully (e.g. pristine water/mountain)
+        // Or, make it always visible if all tiles can have pollution. For now, retaining existing logic.
         (this.tileInfoPollution.parentElement as HTMLElement).style.display = (tileTypeData.zoneCategory || tileTypeData.isDevelopableZone) ? 'block' : 'none'; 
     }
 

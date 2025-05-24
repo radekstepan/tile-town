@@ -195,6 +195,7 @@ export class Game {
         else if (newMode === 'pollution_heatmap') modeName = "Pollution Heatmap";
         this.messageBox.show(`${modeName} view active.`, 2000);
         
+        // Always update hover display, as pane visibility might change based on this call
         this.updateHoveredTileDisplay(this.hoveredTile); 
         if (oldViewMode !== newMode) {
             this.drawGame();
@@ -257,24 +258,22 @@ export class Game {
         }
         this.hoveredTile = coords;
 
-        if (this.currentViewMode === 'default') {
-            if (coords) { 
-                const tileData = this.gridController.getTile(coords.x, coords.y);
-                if (tileData) {
-                    this.tileInfoPane.update(tileData, coords);
-                    this.tileInfoPane.show(); 
-                } else {
-                    this.tileInfoPane.hide(); 
-                }
-            } else { 
-                this.tileInfoPane.hide(); 
+        // Show tile info pane if hovering over a valid tile, regardless of view mode
+        if (coords) {
+            const tileData = this.gridController.getTile(coords.x, coords.y);
+            if (tileData) {
+                this.tileInfoPane.update(tileData, coords);
+                this.tileInfoPane.show();
+            } else {
+                // This case (coords exist but no tileData) should be rare for valid grid coordinates
+                this.tileInfoPane.hide();
             }
-        } else { 
-            this.tileInfoPane.hide(); 
+        } else {
+            // Not hovering over any tile
+            this.tileInfoPane.hide();
         }
         
         if (needsCanvasRedrawForBuildPreview) { 
-            // Calling drawGame ensures the renderer updates its containers for the next Pixi tick
             this.drawGame();
         }
     }

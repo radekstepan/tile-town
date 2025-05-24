@@ -200,13 +200,15 @@ export class SimulationController {
                 if (tile && (tile.type.id === TILE_TYPES.PARK.id || tile.type.id === TILE_TYPES.NATURAL_PARK.id)) {
                     for (let dy = -C.PARK_POLLUTION_REDUCTION_RADIUS; dy <= C.PARK_POLLUTION_REDUCTION_RADIUS; dy++) {
                         for (let dx = -C.PARK_POLLUTION_REDUCTION_RADIUS; dx <= C.PARK_POLLUTION_REDUCTION_RADIUS; dx++) {
-                            const dist = Math.abs(dx) + Math.abs(dy);
+                            const dist = Math.abs(dx) + Math.abs(dy); // Manhattan distance for simplicity
                             if (dist <= C.PARK_POLLUTION_REDUCTION_RADIUS) {
                                 const nx = x + dx;
                                 const ny = y + dy;
                                 if (nx >= 0 && nx < C.GRID_SIZE_X && ny >= 0 && ny < C.GRID_SIZE_Y) {
                                     const targetTile = this.gridController.getTile(nx,ny);
-                                    if(targetTile && !targetTile.type.isObstacle) landMap[ny][nx] -= C.PARK_POLLUTION_REDUCTION_AMOUNT / (dist + 1);
+                                    if(targetTile && !targetTile.type.isObstacle) {
+                                        landMap[ny][nx] -= C.PARK_POLLUTION_REDUCTION_AMOUNT / (dist + 1);
+                                    }
                                 }
                             }
                         }
@@ -220,14 +222,20 @@ export class SimulationController {
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
                 let currentValue = C.BASE_TILE_VALUE;
-                for (let dy = -Math.max(C.WATER_INFLUENCE_RADIUS, C.PARK_INFLUENCE_RADIUS); dy <= Math.max(C.WATER_INFLUENCE_RADIUS, C.PARK_INFLUENCE_RADIUS); dy++) {
-                    for (let dx = -Math.max(C.WATER_INFLUENCE_RADIUS, C.PARK_INFLUENCE_RADIUS); dx <= Math.max(C.WATER_INFLUENCE_RADIUS, C.PARK_INFLUENCE_RADIUS); dx++) {
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        const nx = x + dx;
-                        const ny = y + dy;
-                        if (nx >= 0 && nx < C.GRID_SIZE_X && ny >= 0 && ny < C.GRID_SIZE_Y) {
-                            const neighborTile = this.gridController.getTile(nx, ny);
+                const tileBeingEvaluated = this.gridController.getTile(x, y); // Get the tile (x,y) once
+
+                // Water and Park influence (radial)
+                // Iterate over a bounding box and check distance for radial effects
+                const maxInfluenceRadius = Math.max(C.WATER_INFLUENCE_RADIUS, C.PARK_INFLUENCE_RADIUS);
+                for (let dy_influence = -maxInfluenceRadius; dy_influence <= maxInfluenceRadius; dy_influence++) {
+                    for (let dx_influence = -maxInfluenceRadius; dx_influence <= maxInfluenceRadius; dx_influence++) {
+                        const neighborX = x + dx_influence;
+                        const neighborY = y + dy_influence;
+
+                        if (neighborX >= 0 && neighborX < C.GRID_SIZE_X && neighborY >= 0 && neighborY < C.GRID_SIZE_Y) {
+                            const neighborTile = this.gridController.getTile(neighborX, neighborY);
                             if (neighborTile) {
+                                const dist = Math.sqrt(dx_influence * dx_influence + dy_influence * dy_influence);
                                 if (neighborTile.type.id === 'water' && dist <= C.WATER_INFLUENCE_RADIUS) {
                                     currentValue += C.WATER_TILE_VALUE_BONUS * (1 - dist / (C.WATER_INFLUENCE_RADIUS + 1));
                                 }
@@ -238,29 +246,41 @@ export class SimulationController {
                         }
                     }
                 }
+
+                // Mountain, Road, and RCI proximity (direct neighbors)
                 const directNeighbors = [{ dx: 0, dy: 1 }, { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: -1, dy: 0 }];
                 for (const n of directNeighbors) {
-                    const nx = x + n.dx;
-                    const ny = y + n.dy;
-                    if (nx >= 0 && nx < C.GRID_SIZE_X && ny >= 0 && ny < C.GRID_SIZE_Y) {
-                        const neighborTile = this.gridController.getTile(nx, ny);
+                    const neighborX = x + n.dx;
+                    const neighborY = y + n.dy;
+                    if (neighborX >= 0 && neighborX < C.GRID_SIZE_X && neighborY >= 0 && neighborY < C.GRID_SIZE_Y) {
+                        const neighborTile = this.gridController.getTile(neighborX, neighborY);
                         if (neighborTile) {
                             if (neighborTile.type.id === 'mountain') currentValue += C.MOUNTAIN_TILE_VALUE_BONUS;
                             if (neighborTile.type.id === 'road') currentValue += C.ROAD_ADJACENCY_TILE_VALUE_BONUS;
-                            const currentTile = this.gridController.getTile(x, y);
-                            if (currentTile?.type.zoneCategory === 'residential') {
+                            
+                            // RCI proximity effects on the tileBeingEvaluated
+                            if (tileBeingEvaluated?.type.zoneCategory === 'residential') {
                                 if (neighborTile.type.zoneCategory === 'commercial') currentValue += C.R_NEAR_C_BONUS;
                                 if (neighborTile.type.zoneCategory === 'industrial') currentValue += C.R_NEAR_I_PENALTY;
-                            } else if (currentTile?.type.zoneCategory === 'commercial') {
+                            } else if (tileBeingEvaluated?.type.zoneCategory === 'commercial') {
                                 if (neighborTile.type.zoneCategory === 'industrial') currentValue += C.C_NEAR_I_BONUS;
                             }
                         }
                     }
                 }
-                currentValue += this.pollutionMap[y][x] * C.POLLUTION_TO_TILE_VALUE_MULTIPLIER;
+
+                // Pollution impact on the tileBeingEvaluated
+                let pollutionDebuffMultiplier = C.POLLUTION_TO_TILE_VALUE_MULTIPLIER;
+                if (tileBeingEvaluated?.type.zoneCategory === 'industrial') {
+                    pollutionDebuffMultiplier = C.INDUSTRIAL_ZONE_POLLUTION_TO_OWN_TILE_VALUE_MULTIPLIER;
+                }
+                currentValue += this.pollutionMap[y][x] * pollutionDebuffMultiplier;
+                
+                // Finalize and store tile value
                 this.tileValueMap[y][x] = Math.max(0, Math.min(C.MAX_TILE_VALUE, currentValue));
-                const gridCell = this.gridController.getTile(x, y);
-                if (gridCell) gridCell.tileValue = this.tileValueMap[y][x];
+                if (tileBeingEvaluated) {
+                    tileBeingEvaluated.tileValue = this.tileValueMap[y][x];
+                }
             }
         }
     }
@@ -300,24 +320,22 @@ export class SimulationController {
 
         for (let dy = -radius; dy <= radius; dy++) {
             for (let dx = -radius; dx <= radius; dx++) {
-                if (dx === 0 && dy === 0 && centerX === (centerX + dx) && centerY === (centerY + dy)) continue;
+                if (dx === 0 && dy === 0) continue; // Skip the center tile itself
                 const nx = centerX + dx;
                 const ny = centerY + dy;
 
                 if (nx >= 0 && nx < C.GRID_SIZE_X && ny >= 0 && ny < C.GRID_SIZE_Y) {
                     const t = this.gridController.getTile(nx, ny);
-                    const currentTileForRoadCheck = this.gridController.getTile(centerX, centerY);
+                    const currentTileForRoadCheck = this.gridController.getTile(centerX, centerY); // Tile for which we are checking access
 
                     if (t && t.type.zoneCategory && categories.includes(t.type.zoneCategory) && t.type.level && t.type.level > 0) {
                         if (!roadConnectedOnly || (t.hasRoadAccess && currentTileForRoadCheck?.hasRoadAccess)) {
                             let value = attributeGetter(t);
                             if (scaleByEfficiency && (t.type.zoneCategory === 'commercial' || t.type.zoneCategory === 'industrial')) {
-                                let efficiency = 0; // Default to 0 if no pop or no capacity
+                                let efficiency = 0; 
                                 if (t.type.populationCapacity && t.type.populationCapacity > 0 && t.population > 0) {
-                                    // Baseline efficiency if any population, then scale up
                                     efficiency = 0.25 + 0.75 * (t.population / t.type.populationCapacity);
                                 }
-                                // If t.population is 0, efficiency remains 0.
                                 value *= Math.max(0, Math.min(1, efficiency));
                             }
                             totalValue += value;
@@ -370,18 +388,17 @@ export class SimulationController {
         if (!tile.hasRoadAccess) {
             shouldDecline = true;
         } else {
-            // Residential looks for raw jobsProvided by C and I.
             const jobAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, ['commercial', 'industrial'],
-                (t) => t.type.jobsProvided || 0, true, false); // scaleByEfficiency is false
+                (t) => t.type.jobsProvided || 0, true, false); 
 
             const growthFactor = desirability + jobAccessScore - (tile.population * C.R_DENSITY_PENALTY_FACTOR);
 
-            if (tile.type.isDevelopableZone && !tile.type.level) { // Is a zone, wants to become L1
+            if (tile.type.isDevelopableZone && !tile.type.level) { 
                 if (growthFactor > C.R_GROWTH_THRESHOLD / 2 && desirability > C.R_MIN_DESIRABILITY_FOR_GROWTH / 2 && tile.type.developsInto) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
                     return;
                 }
-            } else if (tile.type.level && tile.type.level > 0) { // Is an existing building
+            } else if (tile.type.level && tile.type.level > 0) { 
                 if (growthFactor > C.R_GROWTH_THRESHOLD && desirability > C.R_MIN_DESIRABILITY_FOR_GROWTH) {
                     shouldGrow = true;
                 }
@@ -391,12 +408,11 @@ export class SimulationController {
             }
         }
 
-        // Apply growth or decline to population
         if (shouldGrow && !shouldDecline) {
             tile.population += C.R_GROWTH_POPULATION_RATE;
             if (tile.type.populationCapacity && tile.population >= tile.type.populationCapacity) {
                 tile.population = tile.type.populationCapacity;
-                if (tile.type.developsInto && TILE_TYPES[tile.type.developsInto]) { // Try to upgrade if at capacity
+                if (tile.type.developsInto && TILE_TYPES[tile.type.developsInto]) { 
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
                 }
             }
@@ -404,12 +420,11 @@ export class SimulationController {
             tile.population -= C.R_DECLINE_POPULATION_RATE;
             if (tile.population <= 0) {
                 tile.population = 0;
-                if (tile.type.revertsTo && TILE_TYPES[tile.type.revertsTo]) { // Revert to zone or lower level
+                if (tile.type.revertsTo && TILE_TYPES[tile.type.revertsTo]) { 
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.revertsTo]);
                 }
             }
         }
-        // Clamp population
         if (tile.population < 0) tile.population = 0;
         if (tile.type.populationCapacity && tile.population > tile.type.populationCapacity) tile.population = tile.type.populationCapacity;
 
@@ -427,26 +442,24 @@ export class SimulationController {
             shouldDecline = true;
         } else {
             const customerAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'residential',
-                (t) => t.population, true, false); // Customers from R, not scaled
+                (t) => t.population, true, false); 
             const goodsAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'industrial',
-                (t) => t.population, true, true); // Goods from I (proxied by I.pop), scaled by I's efficiency
+                (t) => t.population, true, true); 
 
             const growthFactor = desirability + customerAccessScore + goodsAccessScore - (tile.population * C.C_DENSITY_PENALTY_FACTOR);
 
-            if (tile.type.isDevelopableZone && !tile.type.level) { // Zone to L1
+            if (tile.type.isDevelopableZone && !tile.type.level) { 
                 if (growthFactor > C.C_GROWTH_THRESHOLD / 2 && desirability > C.C_MIN_DESIRABILITY_FOR_GROWTH / 2 && tile.type.developsInto) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
                     return;
                 }
-            } else if (tile.type.level && tile.type.level > 0) { // Existing building
+            } else if (tile.type.level && tile.type.level > 0) { 
                 if (growthFactor > C.C_GROWTH_THRESHOLD && desirability > C.C_MIN_DESIRABILITY_FOR_GROWTH) {
                     shouldGrow = true;
                 }
-                // Decline if primary needs (desirability or customers) are unmet
                 if (desirability < C.C_DECLINE_DESIRABILITY_THRESHOLD || customerAccessScore < C.C_MIN_CUSTOMER_SCORE_FOR_NO_DECLINE) {
                     shouldDecline = true;
                 } else if (goodsAccessScore < C.C_MIN_GOODS_ACCESS_FOR_NO_DECLINE) {
-                    // If primary needs met, but secondary (goods) are not, don't decline, but stall growth.
                     shouldGrow = false;
                 }
             }
@@ -478,7 +491,7 @@ export class SimulationController {
     }
 
     private processIndustrialGrowth(tile: GridTile, x: number, y: number): void {
-        const desirability = tile.tileValue;
+        const desirability = tile.tileValue; 
         let shouldGrow = false;
         let shouldDecline = false;
 
@@ -486,26 +499,24 @@ export class SimulationController {
             shouldDecline = true;
         } else {
             const workerAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'residential',
-                (t) => t.population, true, false); // Workers from R, not scaled
+                (t) => t.population, true, false); 
             const marketAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'commercial',
-                (t) => t.population, true, true); // Market from C (proxied by C.pop), scaled by C's efficiency
+                (t) => t.population, true, true); 
 
             const growthFactor = desirability + workerAccessScore + marketAccessScore - (tile.population * C.I_DENSITY_PENALTY_FACTOR);
 
-            if (tile.type.isDevelopableZone && !tile.type.level) { // Zone to L1
+            if (tile.type.isDevelopableZone && !tile.type.level) { 
                 if (growthFactor > C.I_GROWTH_THRESHOLD / 2 && desirability > C.I_MIN_DESIRABILITY_FOR_GROWTH / 2 && tile.type.developsInto) {
                     this.changeTileLevel(tile, x, y, TILE_TYPES[tile.type.developsInto]);
                     return;
                 }
-            } else if (tile.type.level && tile.type.level > 0) { // Existing building
+            } else if (tile.type.level && tile.type.level > 0) { 
                 if (growthFactor > C.I_GROWTH_THRESHOLD && desirability > C.I_MIN_DESIRABILITY_FOR_GROWTH) {
                     shouldGrow = true;
                 }
-                // Decline if primary needs (desirability or workers) are unmet
                 if (desirability < C.I_DECLINE_DESIRABILITY_THRESHOLD || workerAccessScore < C.I_MIN_WORKER_SCORE_FOR_NO_DECLINE) {
                     shouldDecline = true;
                 } else if (marketAccessScore < C.I_MIN_MARKET_ACCESS_FOR_NO_DECLINE) {
-                    // If primary needs met, but secondary (market) is not, don't decline, but stall growth.
                     shouldGrow = false;
                 }
             }
@@ -540,41 +551,40 @@ export class SimulationController {
         if (tile.type.id === newType.id) return;
 
         const oldType = tile.type;
-        // Store current population before setTileType resets it (if it does)
         const oldPopulation = tile.population;
         this.gridController.setTileType(x, y, newType);
 
         const newGridTileState = this.gridController.getTile(x, y)!;
 
         newGridTileState.pollution = tile.pollution;
-        newGridTileState.tileValue = tile.tileValue;
-        newGridTileState.hasRoadAccess = tile.hasRoadAccess;
+        // tileValue is recalculated fresh each tick, so no need to carry over,
+        // but hasRoadAccess, struggle status should be reset or carried based on logic.
+        newGridTileState.hasRoadAccess = tile.hasRoadAccess; // Will be re-evaluated, but good default
         newGridTileState.isVisuallyStruggling = false;
         newGridTileState.struggleTicks = 0;
 
-        if (newType.isDevelopableZone && !newType.level) { // Reverting to a base ZONE (e.g. RESIDENTIAL_ZONE)
+        if (newType.isDevelopableZone && !newType.level) { 
             newGridTileState.population = 0;
-        } else if (newType.level && oldType.level && newType.level < oldType.level) { // Reverting to lower level BUILDING
-            // Start with a portion of the new capacity, but not more than previous pop or new capacity
+        } else if (newType.level && oldType.level && newType.level < oldType.level) { 
             let pop = newType.populationCapacity ? Math.floor(newType.populationCapacity / 2) : 0;
-            pop = Math.min(pop, oldPopulation); // Don't exceed old pop when reverting
+            pop = Math.min(pop, oldPopulation); 
             newGridTileState.population = newType.populationCapacity ? Math.min(pop, newType.populationCapacity) : pop;
 
-        } else if (newType.level && newType.level > (oldType.level || 0)) { // Developing to higher level BUILDING or from ZONE to L1
+        } else if (newType.level && newType.level > (oldType.level || 0)) { 
             let initialPopOnUpgrade = oldPopulation > 0 ? oldPopulation : 0;
             if (newType.populationCapacity) {
-                if (oldType.isDevelopableZone && !oldType.level) { // Developing from ZONE to L1
+                if (oldType.isDevelopableZone && !oldType.level) { 
                      initialPopOnUpgrade = Math.floor(newType.populationCapacity / 2);
-                } else { // Developing from L1 to L2, L2 to L3 etc.
+                } else { 
                      initialPopOnUpgrade = Math.max(initialPopOnUpgrade, Math.floor(newType.populationCapacity / 2));
                 }
                 newGridTileState.population = Math.min(initialPopOnUpgrade, newType.populationCapacity);
             } else {
                 newGridTileState.population = initialPopOnUpgrade > 0 ? initialPopOnUpgrade : (newType.zoneCategory === 'residential' ? 2 : 1);
             }
-        } else { // Should not happen often: type change without level change (e.g. R_L1 to C_L1)
-            newGridTileState.population = oldPopulation; // Try to preserve
-            if (newType.populationCapacity) { // Clamp to new capacity
+        } else { 
+            newGridTileState.population = oldPopulation; 
+            if (newType.populationCapacity) { 
                 newGridTileState.population = Math.min(newGridTileState.population, newType.populationCapacity);
             }
         }
@@ -584,8 +594,7 @@ export class SimulationController {
             newGridTileState.population = newGridTileState.type.populationCapacity;
         }
          if (newGridTileState.type.populationCapacity && newGridTileState.population === 0 && newType.level && newType.level > 0 && (oldType.isDevelopableZone && !oldType.level)){
-            // If it just developed into L1 from a zone, and somehow ended up with 0 pop, give it a small starter pop
-            newGridTileState.population = Math.floor(newType.populationCapacity / 4);
+            newGridTileState.population = Math.max(1, Math.floor(newType.populationCapacity / 4)); // Ensure at least 1
         }
 
 
@@ -628,17 +637,13 @@ export class SimulationController {
                     if (tile.type.zoneCategory === 'residential') {
                         totalPopulation += tile.population;
                     }
-                    // For calculating total available jobs in the city (for employment rate)
                     if (tile.type.jobsProvided && tile.type.level && tile.type.level > 0) {
                         let jobEfficiency = 1.0;
-                        // Commercial and Industrial jobs are scaled by their internal population/capacity
                         if (tile.type.zoneCategory === 'commercial' || tile.type.zoneCategory === 'industrial') {
                             if (tile.type.populationCapacity && tile.type.populationCapacity > 0) {
-                                // If a C/I zone has no internal population, it offers no effective jobs
-                                // Otherwise, its job offering scales with its internal population, with a small base
                                 jobEfficiency = tile.population > 0 ? (0.1 + 0.9 * (tile.population / tile.type.populationCapacity)) : 0;
                             } else {
-                                jobEfficiency = tile.population > 0 ? 1.0 : 0; // No capacity defined, if it has pop, all jobs are there
+                                jobEfficiency = tile.population > 0 ? 1.0 : 0; 
                             }
                         }
                         totalJobsAvailable += (tile.type.jobsProvided * jobEfficiency);
@@ -651,7 +656,7 @@ export class SimulationController {
         this.gameInstance.totalPopulation = totalPopulation;
 
         const employedWorkforce = Math.min(totalJobsAvailable, totalPopulation);
-        this.gameInstance.employmentRate = (totalPopulation > 0) ? (employedWorkforce / totalPopulation) * 100 : 0; // Ensure 0 if no pop
+        this.gameInstance.employmentRate = (totalPopulation > 0) ? (employedWorkforce / totalPopulation) * 100 : 0; 
 
         let residentialTileValueSum = 0;
         let residentialTileCount = 0;
@@ -671,11 +676,15 @@ export class SimulationController {
     }
 
     public getPollutionAt(x: number, y: number): number {
-        if (this.pollutionMap[y]) return this.pollutionMap[y][x] || 0;
+        if (x >= 0 && x < C.GRID_SIZE_X && y >= 0 && y < C.GRID_SIZE_Y && this.pollutionMap[y]) {
+            return this.pollutionMap[y][x] || 0;
+        }
         return 0;
     }
     public getTileValueAt(x: number, y: number): number {
-        if (this.tileValueMap[y]) return this.tileValueMap[y][x] || 0;
+         if (x >= 0 && x < C.GRID_SIZE_X && y >= 0 && y < C.GRID_SIZE_Y && this.tileValueMap[y]) {
+            return this.tileValueMap[y][x] || 0;
+        }
         return 0;
     }
 }
