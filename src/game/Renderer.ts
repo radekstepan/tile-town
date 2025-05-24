@@ -2,7 +2,8 @@ import * as PIXI from 'pixi.js';
 import { GridTile, TileType, Coordinates, ViewMode } from '../types';
 import * as C from '../config/constants';
 import { lightenColor, darkenColor } from '../utils/colorUtils';
-import { Game } from './Game'; // For type hint of gameInstanceGetter
+import { Game } from './Game'; 
+import { TILE_TYPES } from '../config/tileTypes'; 
 
 export class Renderer {
     private app: PIXI.Application;
@@ -38,7 +39,7 @@ export class Renderer {
         let r: number, g: number, b: number = 0;
         let alpha: number;
 
-        if (type === 'positive') { // Tile Value: Red (low value) -> Yellow (mid) -> Green (high value)
+        if (type === 'positive') { 
             const normalizedValue = Math.min(Math.max(value, 0) / maxValue, 1);
             alpha = 0.2 + normalizedValue * 0.5; 
 
@@ -53,7 +54,7 @@ export class Renderer {
             }
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 
-        } else { // 'negative' type (Pollution): Low pollution = Yellow, Mid = Orange, High = Red
+        } else { 
             if (value < 0.1) { 
                 return null;
             }
@@ -72,7 +73,7 @@ export class Renderer {
     private drawPixiTileGraphics(
         graphics: PIXI.Graphics,
         tileData: GridTile,
-        isBeingPreviewed: boolean = false
+        isBeingPreviewed: boolean = false 
     ): void {
         const tileType = tileData.type;
         graphics.clear();
@@ -91,12 +92,14 @@ export class Renderer {
         const outlineColorPixi = this.hexToPixiColor(darkenColor(baseColorHex, 18));
         graphics.lineStyle(0.7, outlineColorPixi, fillAlpha);
 
-        graphics.moveTo(0, 0);
-        graphics.lineTo(TILE_HALF_WIDTH, TILE_HALF_HEIGHT);
-        graphics.lineTo(0, TILE_HEIGHT);
-        graphics.lineTo(-TILE_HALF_WIDTH, TILE_HALF_HEIGHT);
+        graphics.moveTo(0, 0); 
+        graphics.lineTo(TILE_HALF_WIDTH, TILE_HALF_HEIGHT); 
+        graphics.lineTo(0, TILE_HEIGHT); 
+        graphics.lineTo(-TILE_HALF_WIDTH, TILE_HALF_HEIGHT); 
         graphics.closePath();
         graphics.endFill();
+
+        // Removed grass texture drawing logic
 
         if (tileType.renderHeight && tileType.renderHeight > 0.001) {
             const isStruggling = tileData.isVisuallyStruggling === true;
@@ -170,7 +173,7 @@ export class Renderer {
                 tileGraphics.x = (x - y) * C.TILE_HALF_WIDTH_ISO;
                 tileGraphics.y = (x + y) * C.TILE_HALF_HEIGHT_ISO;
                 
-                this.drawPixiTileGraphics(tileGraphics, gridData[y][x], false);
+                this.drawPixiTileGraphics(tileGraphics, gridData[y][x], false); 
                 this.tileContainer.addChild(tileGraphics);
             }
         }
@@ -215,7 +218,6 @@ export class Renderer {
             }
         }
         
-        // Render Hover Info (Simplified Text)
         if (hoveredTileForInfo && currentViewMode === 'default') { 
             const tile = gridData[hoveredTileForInfo.y]?.[hoveredTileForInfo.x];
             if (tile && tile.type.zoneCategory && tile.type.level && tile.type.level > 0 && tile.type.populationCapacity) {
@@ -226,21 +228,20 @@ export class Renderer {
                     prefix = "Pop: ";
                     infoTextContent = `${prefix}${tile.population}/${tile.type.populationCapacity}`;
                 } else if (tile.type.zoneCategory === 'commercial' || tile.type.zoneCategory === 'industrial') {
-                    prefix = "Op: "; // Operational Level
+                    prefix = "Op: "; 
                     infoTextContent = `${prefix}${tile.population}/${tile.type.populationCapacity}`;
                 }
 
                 if (infoTextContent) {
                     const textStyle = new PIXI.TextStyle({
-                        fontFamily: 'Arial', // Standard, usually crisp
-                        fontSize: 14,       // Slightly larger for clarity
+                        fontFamily: 'Arial', 
+                        fontSize: 14,       
                         fill: '#ffffff',
                         stroke: '#000000',
-                        strokeThickness: 2, // Thinner stroke
+                        strokeThickness: 2, 
                         align: 'center'
                     });
                     const pixiText = new PIXI.Text(infoTextContent, textStyle);
-                    // Apply higher resolution for sharper text
                     pixiText.resolution = this.app.renderer.resolution * 2; 
                     pixiText.style.fontSize = Math.floor(textStyle.fontSize / pixiText.resolution * (this.app.renderer.resolution * 2));
 
@@ -250,7 +251,7 @@ export class Renderer {
                     const buildingVisualHeight = (tile.type.renderHeight || 0) * C.TILE_DEPTH_UNIT;
                     
                     pixiText.x = tileScreenX;
-                    pixiText.y = tileScreenY - (C.TILE_HALF_HEIGHT_ISO / 2) - buildingVisualHeight - 8; // Adjusted Y positioning (more space)
+                    pixiText.y = tileScreenY - (C.TILE_HALF_HEIGHT_ISO / 2) - buildingVisualHeight - 8; 
                     pixiText.anchor.set(0.5, 1); 
 
                     this.hoverInfoContainer.addChild(pixiText);
@@ -258,7 +259,6 @@ export class Renderer {
             }
         }
 
-        // Render Build Preview
         if (currentBuildTypeForPreview && hoveredTileForPreview && currentViewMode === 'default') {
             const previewTileData: GridTile = {
                 type: currentBuildTypeForPreview,
@@ -273,7 +273,7 @@ export class Renderer {
             previewGraphics.x = (hoveredTileForPreview.x - hoveredTileForPreview.y) * C.TILE_HALF_WIDTH_ISO;
             previewGraphics.y = (hoveredTileForPreview.x + hoveredTileForPreview.y) * C.TILE_HALF_HEIGHT_ISO;
             
-            this.drawPixiTileGraphics(previewGraphics, previewTileData, true);
+            this.drawPixiTileGraphics(previewGraphics, previewTileData, true); 
             this.previewContainer.addChild(previewGraphics);
         }
     }
