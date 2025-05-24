@@ -3,8 +3,8 @@ export const MAX_TILE_VALUE = 255; // Max land value
 export const MAX_POLLUTION = 255;  // Max pollution value
 
 // Pollution Constants
-export const POLLUTION_PER_INDUSTRIAL_POPULATION_UNIT = 8.0;
-export const PARK_POLLUTION_REDUCTION_AMOUNT = 10;
+export const POLLUTION_PER_INDUSTRIAL_POPULATION_UNIT = 6.5;
+export const PARK_POLLUTION_REDUCTION_AMOUNT = 15;
 export const PARK_POLLUTION_REDUCTION_RADIUS = 2;
 export const POLLUTION_DECAY_FACTOR = 0.98;
 export const POLLUTION_SPREAD_FACTOR = 0.1;
@@ -34,17 +34,17 @@ export const POLLUTION_TO_TILE_VALUE_MULTIPLIER = -2; // General negative impact
 export const INDUSTRIAL_ZONE_POLLUTION_TO_OWN_TILE_VALUE_MULTIPLIER = -0.15; // Industrial zones care less about their own pollution for their own tile value
 
 // RCI Proximity Bonuses/Penalties for Tile Value (applied in a small radius, e.g., 1-2 tiles)
-export const R_NEAR_C_BONUS = 8;
-export const R_NEAR_I_PENALTY = -12; // Residential near Industrial
-export const C_NEAR_I_BONUS = 5;   // Commercial near Industrial
+export const R_NEAR_C_BONUS = 10;
+export const R_NEAR_I_PENALTY = -8; // Residential near Industrial
+export const C_NEAR_I_BONUS = 7;   // Commercial near Industrial
 
 // Zone Growth/Decline Constants
 export const CONNECTIVITY_RADIUS = 8;
 
 // Residential (R)
 export const R_DENSITY_PENALTY_FACTOR = 0.5;
-export const R_GROWTH_THRESHOLD = 100;
-export const R_MIN_DESIRABILITY_FOR_GROWTH = 60;
+export const R_GROWTH_THRESHOLD = 80;
+export const R_MIN_DESIRABILITY_FOR_GROWTH = 50;
 export const R_DECLINE_DESIRABILITY_THRESHOLD = 25; 
 export const R_MIN_JOB_SCORE_FOR_NO_DECLINE = 5;  
 export const R_GROWTH_POPULATION_RATE = 2;
@@ -52,22 +52,22 @@ export const R_DECLINE_POPULATION_RATE = 1;
 
 // Commercial (C)
 export const C_DENSITY_PENALTY_FACTOR = 0.3;
-export const C_GROWTH_THRESHOLD = 90;
-export const C_MIN_DESIRABILITY_FOR_GROWTH = 55;
+export const C_GROWTH_THRESHOLD = 70;
+export const C_MIN_DESIRABILITY_FOR_GROWTH = 45;
 export const C_DECLINE_DESIRABILITY_THRESHOLD = 20; 
-export const C_MIN_CUSTOMER_SCORE_FOR_NO_DECLINE = 8; 
+export const C_MIN_CUSTOMER_SCORE_FOR_NO_DECLINE = 7; 
 export const C_MIN_GOODS_ACCESS_FOR_NO_DECLINE = 5; 
-export const C_GROWTH_POPULATION_RATE = 1;
+export const C_GROWTH_POPULATION_RATE = 2;
 export const C_DECLINE_POPULATION_RATE = 1;
 
 // Industrial (I)
 export const I_DENSITY_PENALTY_FACTOR = 0.2;
-export const I_GROWTH_THRESHOLD = 80;
-export const I_MIN_DESIRABILITY_FOR_GROWTH = 30; // Industrial zones require this tile value to grow/sustain
+export const I_GROWTH_THRESHOLD = 65;
+export const I_MIN_DESIRABILITY_FOR_GROWTH = 35; // Industrial zones require this tile value to grow/sustain
 export const I_DECLINE_DESIRABILITY_THRESHOLD = 15; // If tile value (desirability) drops below this, they decline
-export const I_MIN_WORKER_SCORE_FOR_NO_DECLINE = 10; 
+export const I_MIN_WORKER_SCORE_FOR_NO_DECLINE = 9; 
 export const I_MIN_MARKET_ACCESS_FOR_NO_DECLINE = 5; 
-export const I_GROWTH_POPULATION_RATE = 3;
+export const I_GROWTH_POPULATION_RATE = 2;
 export const I_DECLINE_POPULATION_RATE = 1; 
 
 // Tax Modifier Thresholds (lower value = lower tax) - Made stricter
