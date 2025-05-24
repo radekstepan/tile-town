@@ -1,9 +1,12 @@
-- efficiency show in blue in the info pane unlike the other fields
-- do not show preview of a tile if we are hovering over a mountain
+- city hall should be randomly placed
 - do not place initial road by city hall, it has a carry cost so we start losing money straight away
+- do not show preview of a tile if we are hovering over a mountain
+
 - the overlay (tile value, polution) need to render correctly when showing over a hilly terrain. The "wall" facing me is notpainted with the overlay color.
 - zone tiles need to show the same wall caolor even for the "block" that's under ground. E.g. when a business is strugglign and we give it a darker shade, I need to see this darker shade underground as well.
+- efficiency show in blue in the info pane unlike the other fields
 
+- how do I fix tile location logic? If I am up a mountain and hover over the "top" of a block (building), that could actually be the tile next to it
 - Genrate a map based on a seed I can reuse; seed=true should show a seed and I should be able to put it somewhere seed=VALUE
 - Web Workers - Offload heavy calculations to background threads
 - Request Animation Frame - Use this for smooth animation timing

@@ -11,6 +11,7 @@ export class GridController {
         if (skipInitialGeneration) {
             this.resetGridToGrass(); 
             if (typeof window === 'undefined') { 
+                // Fixed placement for headless/test environments if skipping full generation
                 this.placeCityHall(Math.floor(C.GRID_SIZE_X / 2), Math.floor(C.GRID_SIZE_Y / 2) -2);
             }
         } else {
@@ -46,30 +47,35 @@ export class GridController {
         if (this.isValidCoordinate(x, y) && this.grid[y][x].type.id === TILE_TYPES.GRASS.id) { 
             const baseTileElevation = this.grid[y][x].elevation;
             this.setTileType(x, y, TILE_TYPES.CITY_HALL);
+            // Ensure elevation is preserved as setTileType might reset it for City Hall based on its definition
             this.grid[y][x].elevation = baseTileElevation; 
             this.cityHallCoords = { x, y };
             
-            const roadOffsets = [{dx:0, dy:1}, {dx:1, dy:0}, {dx:0, dy:-1}, {dx:-1, dy:0}]; 
-            let roadPlaced = false;
-            for(const offset of roadOffsets) {
-                const rx = x + offset.dx;
-                const ry = y + offset.dy;
-                const roadTile = this.getTile(rx,ry);
-                if(this.isValidCoordinate(rx,ry) && roadTile && roadTile.type.id === TILE_TYPES.GRASS.id) {
-                    const roadBaseElevation = roadTile.elevation;
-                    this.setTileType(rx,ry, TILE_TYPES.ROAD);
-                    this.grid[ry][rx].elevation = roadBaseElevation;
-                    roadPlaced = true;
-                    break; 
-                }
-                if(this.isValidCoordinate(rx,ry) && roadTile && roadTile.type.id === TILE_TYPES.ROAD.id) {
-                    roadPlaced = true;
-                    break;
-                }
-            }
-            if (!roadPlaced) {
-                console.warn(`City Hall placed at ${x},${y} but could not place an adjacent road for initial access.`);
-            }
+            // --- Initial road placement logic removed as per request ---
+            // const roadOffsets = [{dx:0, dy:1}, {dx:1, dy:0}, {dx:0, dy:-1}, {dx:-1, dy:0}]; 
+            // let roadPlaced = false;
+            // for(const offset of roadOffsets) {
+            //     const rx = x + offset.dx;
+            //     const ry = y + offset.dy;
+            //     const roadTile = this.getTile(rx,ry);
+            //     if(this.isValidCoordinate(rx,ry) && roadTile && roadTile.type.id === TILE_TYPES.GRASS.id) {
+            //         const roadBaseElevation = roadTile.elevation;
+            //         this.setTileType(rx,ry, TILE_TYPES.ROAD);
+            //         this.grid[ry][rx].elevation = roadBaseElevation;
+            //         roadPlaced = true;
+            //         break; 
+            //     }
+            //     if(this.isValidCoordinate(rx,ry) && roadTile && roadTile.type.id === TILE_TYPES.ROAD.id) {
+            //         roadPlaced = true;
+            //         break;
+            //     }
+            // }
+            // if (!roadPlaced) {
+            //     // This warning is no longer relevant as we are intentionally not placing a road.
+            //     // console.warn(`City Hall placed at ${x},${y} but no initial road was placed.`);
+            // }
+            // --- End of removed road placement logic ---
+
             return true;
         } else {
             return false;
@@ -133,45 +139,72 @@ export class GridController {
             this.generateInitialParks();   
         }
 
-        let cityHallX = Math.floor(C.GRID_SIZE_X / 2);
-        let cityHallY = Math.floor(C.GRID_SIZE_Y / 2) - 2; 
-
+        // --- City Hall Placement Logic (Randomized) ---
         let chPlaced = false;
-        // Try to place City Hall on a tile that's not too high or too low, preferentially
-        // This is a simple heuristic; a more complex one might find an average elevation area.
-        const idealElevation = Math.floor(C.MAX_ELEVATION_LEVEL / 3); 
-        let bestSpot: {x: number, y: number, diff: number} | null = null;
+        let chX = -1, chY = -1; // For logging if needed
 
-        for (let y_ch = 0; y_ch < C.GRID_SIZE_Y; y_ch++) {
-            for (let x_ch = 0; x_ch < C.GRID_SIZE_X; x_ch++) {
-                const tile = this.getTile(x_ch, y_ch);
+        // Find all available grass tiles
+        const grassTiles: Coordinates[] = [];
+        for (let y_coord = 0; y_coord < C.GRID_SIZE_Y; y_coord++) {
+            for (let x_coord = 0; x_coord < C.GRID_SIZE_X; x_coord++) {
+                const tile = this.getTile(x_coord, y_coord);
                 if (tile && tile.type.id === TILE_TYPES.GRASS.id) {
-                    const diff = Math.abs(tile.elevation - idealElevation);
-                    if (!bestSpot || diff < bestSpot.diff) {
-                        bestSpot = {x: x_ch, y: y_ch, diff: diff};
-                    }
+                    // Optional: Could add constraints here (e.g., not too close to border, specific elevation range)
+                    // For now, any grass tile is a candidate for City Hall.
+                    grassTiles.push({ x: x_coord, y: y_coord });
                 }
             }
         }
-        
-        if (bestSpot && this.placeCityHall(bestSpot.x, bestSpot.y)) {
-            chPlaced = true;
-        } else { // Fallback to original placement if preferred spot fails
-            for (let i = 0; i < 5; i++) { 
-                const tryY = Math.max(0, cityHallY - i);
-                const tryX = cityHallX;
-                if (this.placeCityHall(tryX, tryY)) {
+
+        if (grassTiles.length > 0) {
+            // Shuffle the grass tiles to pick a random one
+            for (let i = grassTiles.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [grassTiles[i], grassTiles[j]] = [grassTiles[j], grassTiles[i]]; // Swap
+            }
+
+            // Try to place City Hall on one of the random grass tiles
+            for (const spot of grassTiles) {
+                if (this.placeCityHall(spot.x, spot.y)) {
                     chPlaced = true;
+                    chX = spot.x; 
+                    chY = spot.y;
                     break;
                 }
             }
         }
 
-        if (!chPlaced) { 
-             if(!this.placeCityHall(Math.floor(C.GRID_SIZE_X / 2), Math.floor(C.GRID_SIZE_Y / 2))) {
-                console.error("CRITICAL: Could not place City Hall even at map center.");
-             }
+        if (!chPlaced) {
+            console.error("CRITICAL: Could not place City Hall on any available grass tile.");
+            // As an absolute last resort, try placing at the center of the map.
+            // This indicates a potential issue with map generation if no grass is available.
+            const fallbackX = Math.floor(C.GRID_SIZE_X / 2);
+            const fallbackY = Math.floor(C.GRID_SIZE_Y / 2);
+            
+            // Ensure the fallback spot is grass before attempting to place City Hall
+            const fallbackTile = this.getTile(fallbackX, fallbackY);
+            if (fallbackTile && fallbackTile.type.id !== TILE_TYPES.GRASS.id) {
+                 // If not grass, change it to grass (this is an emergency override)
+                const currentElevation = fallbackTile.elevation;
+                this.setTileType(fallbackX, fallbackY, TILE_TYPES.GRASS);
+                this.grid[fallbackY][fallbackX].elevation = currentElevation; // Preserve elevation
+                console.warn(`Fallback City Hall location (${fallbackX},${fallbackY}) was not grass. Overwriting to grass.`);
+            } else if (!fallbackTile) {
+                 // Should not happen on a valid grid, but handle defensively
+                this.grid[fallbackY][fallbackX] = this.createDefaultGridTile(TILE_TYPES.GRASS);
+                 console.warn(`Fallback City Hall location (${fallbackX},${fallbackY}) was undefined. Creating grass tile.`);
+            }
+
+            if (this.placeCityHall(fallbackX, fallbackY)) {
+                chPlaced = true;
+                chX = fallbackX;
+                chY = fallbackY;
+                console.warn(`City Hall placed at fallback location: ${chX}, ${chY}`);
+            } else {
+                 console.error(`City Hall placement failed completely, even at fallback: ${fallbackX}, ${fallbackY}.`);
+            }
         }
+        // --- End of City Hall Placement Logic ---
     }
 
     public generateTestTownLayout(): void {
@@ -181,7 +214,21 @@ export class GridController {
         const centerX = Math.floor(C.GRID_SIZE_X / 2);
         const centerY = Math.floor(C.GRID_SIZE_Y / 2);
 
+        // generateTestTownLayout still places City Hall at a fixed point and with roads,
+        // as it's for a specific test scenario.
         this.placeCityHall(centerX, centerY -3); 
+        
+        // Manually add roads for test town, as placeCityHall no longer does.
+        if (this.cityHallCoords) { // Ensure CH was placed
+            const chRoadX = this.cityHallCoords.x;
+            const chRoadY = this.cityHallCoords.y + 1; // Road below CH
+            if(this.isValidCoordinate(chRoadX, chRoadY) && this.getTile(chRoadX, chRoadY)?.type.id === TILE_TYPES.GRASS.id) {
+                const baseElev = this.getTile(chRoadX, chRoadY)!.elevation;
+                this.setTileType(chRoadX, chRoadY, TILE_TYPES.ROAD);
+                this.getTile(chRoadX, chRoadY)!.elevation = baseElev;
+            }
+        }
+
 
         for (let i = -2; i <= 2; i++) { 
             if (this.isValidCoordinate(centerX + i, centerY - 1)) {
@@ -190,18 +237,26 @@ export class GridController {
                 this.getTile(centerX+i, centerY-1)!.elevation = baseElev;
             }
         }
-        const chRoadY = (this.cityHallCoords?.y ?? centerY -3) +1; 
-        const chRoadTile = this.getTile(centerX, chRoadY);
-        if(this.isValidCoordinate(centerX, chRoadY) && chRoadTile && chRoadTile.type.id === TILE_TYPES.GRASS.id){
-            const baseElev = chRoadTile.elevation;
-            this.setTileType(centerX, chRoadY, TILE_TYPES.ROAD);
-            this.getTile(centerX, chRoadY)!.elevation = baseElev;
+        
+        // Use the Y coordinate of the road placed by City Hall, or a default if CH failed.
+        const chRoadYForTestLayout = (this.cityHallCoords ? this.cityHallCoords.y + 1 : centerY -2);
+
+        // Ensure the central road segment connecting to CH road is placed
+        const centralRoadTile = this.getTile(centerX, chRoadYForTestLayout);
+        if(this.isValidCoordinate(centerX, chRoadYForTestLayout) && centralRoadTile && centralRoadTile.type.id === TILE_TYPES.GRASS.id){
+            const baseElev = centralRoadTile.elevation;
+            this.setTileType(centerX, chRoadYForTestLayout, TILE_TYPES.ROAD);
+            this.getTile(centerX, chRoadYForTestLayout)!.elevation = baseElev;
         }
+
         for (let i = centerY - 2; i <= centerY; i++) { 
              if (this.isValidCoordinate(centerX, i )) {
-                const baseElev = this.getTile(centerX, i)!.elevation;
-                this.setTileType(centerX, i, TILE_TYPES.ROAD);
-                this.getTile(centerX,i)!.elevation = baseElev;
+                 // Check if it's not the CH road itself if already placed, to avoid double processing
+                if (i !== chRoadYForTestLayout || this.getTile(centerX,i)?.type.id === TILE_TYPES.GRASS.id) {
+                    const baseElev = this.getTile(centerX, i)!.elevation;
+                    this.setTileType(centerX, i, TILE_TYPES.ROAD);
+                    this.getTile(centerX,i)!.elevation = baseElev;
+                }
              }
         }
 
