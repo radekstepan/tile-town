@@ -185,8 +185,10 @@ export class Game {
     }
     
     public handleToolSelection(toolAction: string, tileType: TileType | null): void {
-        let needsRedrawForBuildPreview = false;
+        let needsRedrawForBuildPreviewOrHoverInfo = false;
         const oldBuildPreviewActive = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
+        const oldHoverInfoActive = this.currentViewMode === 'default' && !!this.hoveredTile;
+
 
         if (toolAction === 'pan_toggle') {
             if (this.currentMode === 'pan') {
@@ -210,13 +212,15 @@ export class Game {
         }
 
         const newBuildPreviewActive = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
-        if (oldBuildPreviewActive !== newBuildPreviewActive) {
-            needsRedrawForBuildPreview = true;
+        const newHoverInfoActive = this.currentViewMode === 'default' && !!this.hoveredTile;
+
+        if (oldBuildPreviewActive !== newBuildPreviewActive || oldHoverInfoActive !== newHoverInfoActive) {
+            needsRedrawForBuildPreviewOrHoverInfo = true;
         }
         
-        this.updateHoveredTileDisplay(this.hoveredTile);
+        this.updateHoveredTileDisplay(this.hoveredTile); // This itself might trigger a redraw
 
-        if (needsRedrawForBuildPreview) {
+        if (needsRedrawForBuildPreviewOrHoverInfo && !this.hoveredTile) { // Only force redraw if hover update didn't
             this.drawGame();
         }
     }
@@ -235,7 +239,7 @@ export class Game {
         this.messageBox.show(`${modeName} view active.`, 2000);
         
         this.updateHoveredTileDisplay(this.hoveredTile); 
-        if (oldViewMode !== newMode) {
+        if (oldViewMode !== newMode) { // Redraw if view mode actually changed visual output
             this.drawGame();
         }
     }
@@ -271,7 +275,8 @@ export class Game {
             this.cameraOffsetX, this.cameraOffsetY,
             (this.currentMode === 'build' && this.currentViewMode === 'default' && this.currentBuildType) ? this.hoveredTile : null,
             this.currentBuildType,
-            this.currentViewMode
+            this.currentViewMode,
+            this.hoveredTile // Pass general hovered tile for info avatar
         );
     }
     
@@ -285,16 +290,27 @@ export class Game {
     }
     
     public updateHoveredTileDisplay(coords: Coordinates | null): void {
-        let needsCanvasRedrawForBuildPreview = false;
-        const oldHoveredTileForPreview = this.hoveredTile;
-        const shouldShowBuildPreviewNow = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
+        let needsCanvasRedraw = false;
+        const oldHoveredTile = this.hoveredTile;
         
-        if ((oldHoveredTileForPreview?.x !== coords?.x || oldHoveredTileForPreview?.y !== coords?.y) ||
-            (shouldShowBuildPreviewNow !== (!!this.currentBuildType && !!oldHoveredTileForPreview && this.currentMode === 'build' && this.currentViewMode === 'default'))) {
-             if(shouldShowBuildPreviewNow || (this.currentMode === 'build' && this.currentBuildType && oldHoveredTileForPreview && !coords) ) {
-                needsCanvasRedrawForBuildPreview = true;
-             }
+        // Check if hover status for build preview changed
+        const shouldShowBuildPreviewNow = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
+        const wasShowingBuildPreview = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType && !!oldHoveredTile;
+
+        if (shouldShowBuildPreviewNow !== wasShowingBuildPreview || (shouldShowBuildPreviewNow && (oldHoveredTile?.x !== coords?.x || oldHoveredTile?.y !== coords?.y))) {
+            needsCanvasRedraw = true;
         }
+
+        // Check if hover status for info avatar changed (tile itself or view mode affecting visibility)
+        const shouldShowInfoAvatarNow = !!coords && this.currentViewMode === 'default';
+        const wasShowingInfoAvatar = !!oldHoveredTile && this.currentViewMode === 'default'; 
+                                     // (assuming view mode didn't change in *this exact* call, but Game.setViewMode handles that redraw)
+        
+        if (shouldShowInfoAvatarNow !== wasShowingInfoAvatar || (shouldShowInfoAvatarNow && (oldHoveredTile?.x !== coords?.x || oldHoveredTile?.y !== coords?.y))) {
+             needsCanvasRedraw = true;
+        }
+
+
         this.hoveredTile = coords;
 
         if (!this.isHeadless && typeof this.tileInfoPane.update === 'function') {
@@ -311,7 +327,7 @@ export class Game {
             }
         }
         
-        if (needsCanvasRedrawForBuildPreview) { 
+        if (needsCanvasRedraw) { 
             this.drawGame();
         }
     }

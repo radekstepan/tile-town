@@ -4,19 +4,19 @@ import { TileTypeDefinition } from '../types';
 const createRCILevelProps = (level: number, category: 'residential' | 'commercial' | 'industrial') => {
     let props: any = { level };
     if (category === 'residential') {
-        props.populationCapacity = level * 10; // e.g., L1: 10, L2: 20, L3: 30
-        props.taxRatePerPopulation = 0.5 + level * 0.2; // e.g. L1: 0.7, L2: 0.9, L3: 1.1
-        props.carryCost = 2 + level * 1.5; // Increased carry cost scaling
+        props.populationCapacity = level * 10; 
+        props.taxRatePerPopulation = 0.5 + level * 0.2; 
+        props.carryCost = 2 + level * 1.5; 
     } else if (category === 'commercial') {
-        props.jobsProvided = level * 5; // e.g., L1: 5, L2: 10, L3: 15
-        props.taxRatePerPopulation = 0.8 + level * 0.3; // Commercial taxes based on its own "effective" population/size
-        props.populationCapacity = level * 4; // "Size" for tax calculation
-        props.carryCost = 3 + level * 2.0; // Reduced carry cost scaling for better balance
+        props.jobsProvided = level * 6; // Slightly increased jobs for commercial
+        props.taxRatePerPopulation = 0.8 + level * 0.3; 
+        props.populationCapacity = level * 5; // "Size" for tax/op calculation
+        props.carryCost = 3 + level * 2.0; 
     } else if (category === 'industrial') {
-        props.jobsProvided = level * 8; // e.g., L1: 8, L2: 16, L3: 24
-        props.taxRatePerPopulation = 0.5 + level * 0.15; // Increased tax rate for better balance
-        props.populationCapacity = level * 6; // "Size" for tax calculation
-        props.carryCost = 4 + level * 2; // Increased carry cost scaling
+        props.jobsProvided = level * 12; // Significantly increased jobs for industrial (e.g., L1: 12, L2: 24, L3: 36)
+        props.taxRatePerPopulation = 0.5 + level * 0.25; 
+        props.populationCapacity = level * 8; // "Size" for tax/op calculation (more workers per op level)
+        props.carryCost = 4 + level * 2; 
     }
     props.developsInto = level < 3 ? `${category.toUpperCase()}_L${level + 1}` : undefined;
     props.revertsTo = level > 1 ? `${category.toUpperCase()}_L${level - 1}` : `${category.toUpperCase()}_ZONE`;
@@ -25,8 +25,8 @@ const createRCILevelProps = (level: number, category: 'residential' | 'commercia
 };
 
 export const TILE_TYPES: TileTypeDefinition = {
-    GRASS: { id: 'grass', color: '#72a372', name: 'Grass', cost: 0, renderHeight: 0, carryCost: 0 }, // Cost 0 for grass as a "tool"
-    ROAD: { id: 'road', color: '#4a5568', name: 'Road', cost: 10, renderHeight: 0.01, carryCost: 0.5 }, // Road carry cost can be tuned
+    GRASS: { id: 'grass', color: '#72a372', name: 'Grass', cost: 0, renderHeight: 0, carryCost: 0 },
+    ROAD: { id: 'road', color: '#4a5568', name: 'Road', cost: 10, renderHeight: 0.01, carryCost: 0.5 },
     WATER: { id: 'water', color: '#63b3ed', name: 'Water', cost: 5, renderHeight: 0.02, carryCost: 0, isNature: true },
     PARK: { id: 'park', color: '#38a169', name: 'Park (Player)', cost: 20, renderHeight: 0.15, isNature: true, carryCost: 2 },
     NATURAL_PARK: { id: 'natural_park', color: '#2E7D32', name: 'Natural Park', cost: 0, renderHeight: 0.15, isNature: true, carryCost: 0 },
@@ -51,7 +51,4 @@ export const TILE_TYPES: TileTypeDefinition = {
     INDUSTRIAL_L1: { id: 'industrial_l1', color: '#8c9bab', name: 'Small Factory', renderHeight: 0.45, zoneCategory: 'industrial', ...createRCILevelProps(1, 'industrial') },
     INDUSTRIAL_L2: { id: 'industrial_l2', color: '#a7b8c8', name: 'Medium Factory', renderHeight: 0.65, zoneCategory: 'industrial', ...createRCILevelProps(2, 'industrial') },
     INDUSTRIAL_L3: { id: 'industrial_l3', color: '#c2d0dd', name: 'Large Factory', renderHeight: 0.85, zoneCategory: 'industrial', ...createRCILevelProps(3, 'industrial') },
-
-    // Rubble/Abandoned (Optional, could be a specific tile type)
-    // RUBBLE: { id: 'rubble', color: '#5a5a5a', name: 'Rubble', cost: 0, renderHeight: 0.1, carryCost: 0.1 },
 };

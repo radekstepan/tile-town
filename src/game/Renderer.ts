@@ -11,6 +11,7 @@ export class Renderer {
     private tileContainer: PIXI.Container;
     private heatmapContainer: PIXI.Container;
     private previewContainer: PIXI.Container;
+    private hoverInfoContainer: PIXI.Container; 
 
     constructor(app: PIXI.Application, gameInstanceGetter: () => Game) {
         this.app = app;
@@ -19,10 +20,12 @@ export class Renderer {
         this.tileContainer = new PIXI.Container();
         this.heatmapContainer = new PIXI.Container();
         this.previewContainer = new PIXI.Container();
+        this.hoverInfoContainer = new PIXI.Container(); 
 
         this.app.stage.addChild(this.tileContainer);
         this.app.stage.addChild(this.heatmapContainer);
         this.app.stage.addChild(this.previewContainer);
+        this.app.stage.addChild(this.hoverInfoContainer); 
     }
 
     private hexToPixiColor(hex: string): number {
@@ -36,7 +39,6 @@ export class Renderer {
         let alpha: number;
 
         if (type === 'positive') { // Tile Value: Red (low value) -> Yellow (mid) -> Green (high value)
-            // For tile value, always calculate and show a color, even if value is 0.
             const normalizedValue = Math.min(Math.max(value, 0) / maxValue, 1);
             alpha = 0.2 + normalizedValue * 0.5; 
 
@@ -52,8 +54,7 @@ export class Renderer {
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 
         } else { // 'negative' type (Pollution): Low pollution = Yellow, Mid = Orange, High = Red
-            // If pollution is effectively zero, don't draw an overlay.
-            if (value < 0.1) { // Threshold for "no pollution" to display
+            if (value < 0.1) { 
                 return null;
             }
 
@@ -141,13 +142,15 @@ export class Renderer {
     public render(
         gridData: GridTile[][],
         cameraOffsetX: number, cameraOffsetY: number,
-        hoveredTileForPreview: Coordinates | null,
+        hoveredTileForPreview: Coordinates | null, 
         currentBuildTypeForPreview: TileType | null,
-        currentViewMode: ViewMode
+        currentViewMode: ViewMode,
+        hoveredTileForInfo: Coordinates | null 
     ): void {
         this.tileContainer.removeChildren();
         this.heatmapContainer.removeChildren();
         this.previewContainer.removeChildren();
+        this.hoverInfoContainer.removeChildren(); 
 
         this.tileContainer.x = cameraOffsetX;
         this.tileContainer.y = cameraOffsetY;
@@ -155,6 +158,9 @@ export class Renderer {
         this.heatmapContainer.y = cameraOffsetY;
         this.previewContainer.x = cameraOffsetX;
         this.previewContainer.y = cameraOffsetY;
+        this.hoverInfoContainer.x = cameraOffsetX; 
+        this.hoverInfoContainer.y = cameraOffsetY; 
+
 
         const game = this.gameInstanceGetter();
 
@@ -209,6 +215,50 @@ export class Renderer {
             }
         }
         
+        // Render Hover Info (Simplified Text)
+        if (hoveredTileForInfo && currentViewMode === 'default') { 
+            const tile = gridData[hoveredTileForInfo.y]?.[hoveredTileForInfo.x];
+            if (tile && tile.type.zoneCategory && tile.type.level && tile.type.level > 0 && tile.type.populationCapacity) {
+                let infoTextContent = "";
+                let prefix = "";
+
+                if (tile.type.zoneCategory === 'residential') {
+                    prefix = "Pop: ";
+                    infoTextContent = `${prefix}${tile.population}/${tile.type.populationCapacity}`;
+                } else if (tile.type.zoneCategory === 'commercial' || tile.type.zoneCategory === 'industrial') {
+                    prefix = "Op: "; // Operational Level
+                    infoTextContent = `${prefix}${tile.population}/${tile.type.populationCapacity}`;
+                }
+
+                if (infoTextContent) {
+                    const textStyle = new PIXI.TextStyle({
+                        fontFamily: 'Arial', // Standard, usually crisp
+                        fontSize: 14,       // Slightly larger for clarity
+                        fill: '#ffffff',
+                        stroke: '#000000',
+                        strokeThickness: 2, // Thinner stroke
+                        align: 'center'
+                    });
+                    const pixiText = new PIXI.Text(infoTextContent, textStyle);
+                    // Apply higher resolution for sharper text
+                    pixiText.resolution = this.app.renderer.resolution * 2; 
+                    pixiText.style.fontSize = Math.floor(textStyle.fontSize / pixiText.resolution * (this.app.renderer.resolution * 2));
+
+
+                    const tileScreenX = (hoveredTileForInfo.x - hoveredTileForInfo.y) * C.TILE_HALF_WIDTH_ISO;
+                    const tileScreenY = (hoveredTileForInfo.x + hoveredTileForInfo.y) * C.TILE_HALF_HEIGHT_ISO;
+                    const buildingVisualHeight = (tile.type.renderHeight || 0) * C.TILE_DEPTH_UNIT;
+                    
+                    pixiText.x = tileScreenX;
+                    pixiText.y = tileScreenY - (C.TILE_HALF_HEIGHT_ISO / 2) - buildingVisualHeight - 8; // Adjusted Y positioning (more space)
+                    pixiText.anchor.set(0.5, 1); 
+
+                    this.hoverInfoContainer.addChild(pixiText);
+                }
+            }
+        }
+
+        // Render Build Preview
         if (currentBuildTypeForPreview && hoveredTileForPreview && currentViewMode === 'default') {
             const previewTileData: GridTile = {
                 type: currentBuildTypeForPreview,

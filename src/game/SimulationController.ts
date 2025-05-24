@@ -318,17 +318,17 @@ export class SimulationController {
 
     public scanRadiusForAttribute(
         centerX: number, centerY: number, radius: number,
-        targetCategory: ZoneCategoryType | ZoneCategoryType[], // Corrected type
+        targetCategory: ZoneCategoryType | ZoneCategoryType[], 
         attributeGetter: (tile: GridTile) => number,
         roadConnectedOnly: boolean,
-        scaleByEfficiency: boolean = false
+        scaleByEfficiency: boolean = false // Note: Efficiency scaling here is for the *provider* of the attribute
     ): number {
         let totalValue = 0;
         const categories = Array.isArray(targetCategory) ? targetCategory : [targetCategory];
 
         for (let dy = -radius; dy <= radius; dy++) {
             for (let dx = -radius; dx <= radius; dx++) {
-                if (dx === 0 && dy === 0) continue;
+                if (dx === 0 && dy === 0) continue; // Don't count self
                 const nx = centerX + dx;
                 const ny = centerY + dy;
 
@@ -342,9 +342,13 @@ export class SimulationController {
                             if (scaleByEfficiency && (t.type.zoneCategory === 'commercial' || t.type.zoneCategory === 'industrial')) {
                                 let efficiency = 0; 
                                 if (t.type.populationCapacity && t.type.populationCapacity > 0 && t.population > 0) {
-                                    efficiency = 0.25 + 0.75 * (t.population / t.type.populationCapacity);
+                                    // Use the more generous job efficiency calculation for scaling provider contribution
+                                    const baseEfficiency = 0.4; // Min efficiency if operational at all
+                                    const scalingFactor = 0.6;
+                                    efficiency = baseEfficiency + scalingFactor * (t.population / t.type.populationCapacity);
+                                    efficiency = Math.max(0, Math.min(1, efficiency));
                                 }
-                                value *= Math.max(0, Math.min(1, efficiency));
+                                value *= efficiency;
                             }
                             totalValue += value;
                         }
@@ -397,7 +401,18 @@ export class SimulationController {
             shouldDecline = true;
         } else {
             const jobAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, ['commercial', 'industrial'],
-                (t) => t.type.jobsProvided || 0, true, false); 
+                (t) => { // Calculate actual jobs from C/I based on their op level
+                    let actualJobs = 0;
+                    if (t.type.jobsProvided && t.type.populationCapacity && t.type.populationCapacity > 0 && t.population > 0) {
+                        const baseEfficiency = 0.4;
+                        const scalingFactor = 0.6;
+                        const efficiency = baseEfficiency + scalingFactor * (t.population / t.type.populationCapacity);
+                        actualJobs = (t.type.jobsProvided || 0) * Math.max(0, Math.min(1, efficiency));
+                    } else if (t.type.jobsProvided && t.population > 0) { // Fallback if no capacity (should not happen for C/I levels)
+                         actualJobs = t.type.jobsProvided;
+                    }
+                    return actualJobs;
+                }, true, false); // Don't double-scale efficiency here, attributeGetter handles it
 
             const growthFactor = desirability + jobAccessScore - (tile.population * C.R_DENSITY_PENALTY_FACTOR);
 
@@ -452,7 +467,7 @@ export class SimulationController {
             const customerAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'residential',
                 (t) => t.population, true, false); 
             const goodsAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'industrial',
-                (t) => t.population, true, true); 
+                (t) => t.population, true, true); // Scale by provider's (industrial) operational efficiency
 
             const growthFactor = desirability + customerAccessScore + goodsAccessScore - (tile.population * C.C_DENSITY_PENALTY_FACTOR);
 
@@ -465,10 +480,8 @@ export class SimulationController {
                 if (growthFactor > C.C_GROWTH_THRESHOLD && desirability > C.C_MIN_DESIRABILITY_FOR_GROWTH) {
                     shouldGrow = true;
                 }
-                if (desirability < C.C_DECLINE_DESIRABILITY_THRESHOLD || customerAccessScore < C.C_MIN_CUSTOMER_SCORE_FOR_NO_DECLINE) {
+                if (desirability < C.C_DECLINE_DESIRABILITY_THRESHOLD || customerAccessScore < C.C_MIN_CUSTOMER_SCORE_FOR_NO_DECLINE || goodsAccessScore < C.C_MIN_GOODS_ACCESS_FOR_NO_DECLINE) {
                     shouldDecline = true;
-                } else if (goodsAccessScore < C.C_MIN_GOODS_ACCESS_FOR_NO_DECLINE) {
-                    shouldGrow = false;
                 }
             }
         }
@@ -509,7 +522,7 @@ export class SimulationController {
             const workerAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'residential',
                 (t) => t.population, true, false); 
             const marketAccessScore = this.scanRadiusForAttribute(x, y, C.CONNECTIVITY_RADIUS, 'commercial',
-                (t) => t.population, true, true); 
+                (t) => t.population, true, true); // Scale by provider's (commercial) operational efficiency
 
             const growthFactor = desirability + workerAccessScore + marketAccessScore - (tile.population * C.I_DENSITY_PENALTY_FACTOR);
 
@@ -522,10 +535,8 @@ export class SimulationController {
                 if (growthFactor > C.I_GROWTH_THRESHOLD && desirability > C.I_MIN_DESIRABILITY_FOR_GROWTH) {
                     shouldGrow = true;
                 }
-                if (desirability < C.I_DECLINE_DESIRABILITY_THRESHOLD || workerAccessScore < C.I_MIN_WORKER_SCORE_FOR_NO_DECLINE) {
+                if (desirability < C.I_DECLINE_DESIRABILITY_THRESHOLD || workerAccessScore < C.I_MIN_WORKER_SCORE_FOR_NO_DECLINE || marketAccessScore < C.I_MIN_MARKET_ACCESS_FOR_NO_DECLINE) {
                     shouldDecline = true;
-                } else if (marketAccessScore < C.I_MIN_MARKET_ACCESS_FOR_NO_DECLINE) {
-                    shouldGrow = false;
                 }
             }
         }
@@ -570,14 +581,18 @@ export class SimulationController {
         newGridTileState.isVisuallyStruggling = false;
         newGridTileState.struggleTicks = 0;
 
-        if (newType.isDevelopableZone && !newType.level) { 
+        if (newType.isDevelopableZone && !newType.level) { // Reverting to a base zone
             newGridTileState.population = 0;
-        } else if (newType.level && oldType.level && newType.level < oldType.level) { 
-            let pop = newType.populationCapacity ? Math.floor(newType.populationCapacity * 0.75) : 0;
-            pop = Math.min(pop, oldPopulation); 
-            newGridTileState.population = pop;
-        } else if (newType.level && newType.level > (oldType.level || 0)) { 
-            let initialPopOnUpgrade = 0;
+        } else if (newType.zoneCategory === 'commercial' || newType.zoneCategory === 'industrial') {
+            // For C/I, give a more generous start when developing or upgrading
+            if (oldType.isDevelopableZone && !oldType.level) { // Upgrading from Zone to L1
+                initialPopOnUpgrade = newType.populationCapacity ? Math.floor(newType.populationCapacity * 0.60) : 1;
+            } else { // Upgrading from L(n) to L(n+1) or L(n) to L(n-1) (if reverting but still a building)
+                let basePopFraction = (newType.level && oldType.level && newType.level < oldType.level) ? 0.75 : 0.40;
+                initialPopOnUpgrade = Math.max(oldPopulation, newType.populationCapacity ? Math.floor(newType.populationCapacity * basePopFraction) : 1);
+            }
+            newGridTileState.population = newType.populationCapacity ? Math.min(initialPopOnUpgrade, newType.populationCapacity) : initialPopOnUpgrade;
+        } else if (newType.zoneCategory === 'residential') { // Residential logic (can remain as before or be similar)
             if (oldType.isDevelopableZone && !oldType.level) { 
                 initialPopOnUpgrade = newType.populationCapacity ? Math.floor(newType.populationCapacity * 0.25) : 1;
             } else { 
@@ -585,15 +600,22 @@ export class SimulationController {
             }
             newGridTileState.population = newType.populationCapacity ? Math.min(initialPopOnUpgrade, newType.populationCapacity) : initialPopOnUpgrade;
         } else { 
-            newGridTileState.population = oldPopulation; 
+            newGridTileState.population = oldPopulation; // Fallback for other types if any
         }
+        
+        var initialPopOnUpgrade; // Hoisted due to use in different blocks
 
         if (newGridTileState.population < 0) newGridTileState.population = 0;
         if (newType.populationCapacity && newGridTileState.population > newType.populationCapacity) {
             newGridTileState.population = newType.populationCapacity;
         }
-        if (newType.level && newType.level > 0 && newGridTileState.population === 0 && newType.populationCapacity && newType.populationCapacity > 0) {
+        // Ensure C/I that are actual buildings (L1+) have at least 1 operational pop if they have capacity
+        if ((newType.zoneCategory === 'commercial' || newType.zoneCategory === 'industrial') && newType.level && newType.level > 0 && newGridTileState.population === 0 && newType.populationCapacity && newType.populationCapacity > 0) {
             newGridTileState.population = 1; 
+        }
+        // Same for residential L1+
+        if (newType.zoneCategory === 'residential' && newType.level && newType.level > 0 && newGridTileState.population === 0 && newType.populationCapacity && newType.populationCapacity > 0) {
+             newGridTileState.population = 1;
         }
         
         if (this.gameInstance && typeof this.gameInstance.drawGame === 'function') {
@@ -638,15 +660,16 @@ export class SimulationController {
                         totalPopulation += tile.population;
                     }
                     if (tile.type.jobsProvided && tile.type.level && tile.type.level > 0) {
-                        let jobEfficiency = 1.0;
-                        if (tile.type.zoneCategory === 'commercial' || tile.type.zoneCategory === 'industrial') {
-                            if (tile.type.populationCapacity && tile.type.populationCapacity > 0) {
-                                jobEfficiency = tile.population > 0 ? (0.1 + 0.9 * (tile.population / tile.type.populationCapacity)) : 0;
-                            } else {
-                                jobEfficiency = tile.population > 0 ? 1.0 : 0; 
-                            }
+                        let jobEfficiency = 0; // Default to 0 if not operational
+                        if ((tile.type.zoneCategory === 'commercial' || tile.type.zoneCategory === 'industrial') &&
+                            tile.type.populationCapacity && tile.type.populationCapacity > 0 && tile.population > 0) {
+                            
+                            const baseEfficiency = 0.4; // Min efficiency if operational at all
+                            const scalingFactor = 0.6; // Remaining efficiency scales with op level
+                            jobEfficiency = baseEfficiency + scalingFactor * (tile.population / tile.type.populationCapacity);
+                            jobEfficiency = Math.max(0, Math.min(1, jobEfficiency)); // Clamp between 0 and 1
                         }
-                        totalJobsAvailable += (tile.type.jobsProvided * jobEfficiency);
+                        totalJobsAvailable += ((tile.type.jobsProvided || 0) * jobEfficiency);
                     }
                 }
             }
