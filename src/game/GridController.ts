@@ -5,8 +5,12 @@ import { TILE_TYPES } from '../config/tileTypes';
 export class GridController {
     public grid: GridTile[][] = [];
 
-    constructor() {
-        this.initializeGrid();
+    constructor(skipInitialGeneration: boolean = false) {
+        if (skipInitialGeneration) {
+            this.resetGridToGrass();
+        } else {
+            this.initializeGrid();
+        }
     }
 
     private createDefaultGridTile(tileType: TileType): GridTile {
@@ -16,77 +20,74 @@ export class GridController {
             tileValue: C.BASE_TILE_VALUE,
             pollution: 0,
             hasRoadAccess: false,
+            isVisuallyStruggling: false,
+            struggleTicks: 0,
         };
     }
-
-    private initializeGrid(): void {
+    
+    public resetGridToGrass(): void {
         this.grid = [];
         for (let y = 0; y < C.GRID_SIZE_Y; y++) {
             this.grid[y] = [];
             for (let x = 0; x < C.GRID_SIZE_X; x++) {
-                // Initialize with grass, properties will be set by setTileType or generate methods
                 this.grid[y][x] = this.createDefaultGridTile(TILE_TYPES.GRASS);
             }
         }
+    }
 
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('town') === 'true') {
+    private initializeGrid(): void {
+        this.resetGridToGrass(); 
+
+        let generateTestTown = false;
+        // In a test environment (Node.js), 'window' is not defined.
+        // Conditional logic for browser-specific features.
+        if (typeof window !== 'undefined' && window.location && window.location.search) {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('town') === 'true') {
+                generateTestTown = true;
+            }
+        }
+        
+        if (generateTestTown) {
             this.generateTestTownLayout();
         } else {
-            this.generateMountains();
-            this.generateWater();
-            this.generateInitialParks();
+            // Only run random generation if not skipping and not generating test town
+            // This avoids random generation during most unit tests unless specifically desired.
+            if (typeof window !== 'undefined') { // Assume random generation only makes sense in browser context
+                this.generateMountains();
+                this.generateWater();
+                this.generateInitialParks();
+            }
         }
     }
 
-    private generateTestTownLayout(): void {
-        console.log("Generating Test Town Layout...");
-        // Ensure grid is clean grass first
-        for (let y = 0; y < C.GRID_SIZE_Y; y++) {
-            for (let x = 0; x < C.GRID_SIZE_X; x++) {
-                this.setTileType(x, y, TILE_TYPES.GRASS);
-                this.clearTileData(x, y); // Resets population, etc.
-            }
-        }
+    // Made public for testing or direct use if needed
+    public generateTestTownLayout(): void {
+        // console.log("Generating Test Town Layout...");
+        this.resetGridToGrass(); // Ensure clean slate for test town
 
         const centerX = Math.floor(C.GRID_SIZE_X / 2);
         const centerY = Math.floor(C.GRID_SIZE_Y / 2);
 
-        // Define a small RCI cluster
-        // R R R
-        // Road Road Road Road Road
-        // C C C Road I I I
-        // Road Road Road Road Road
-        // P P P
-
-        // Roads
         for (let i = -2; i <= 2; i++) {
-            this.setTileType(centerX + i, centerY - 1, TILE_TYPES.ROAD); // Road above C/I
-            this.setTileType(centerX + i, centerY + 1, TILE_TYPES.ROAD); // Road below C/I
+            if (this.isValidCoordinate(centerX + i, centerY - 1)) this.setTileType(centerX + i, centerY - 1, TILE_TYPES.ROAD);
+            if (this.isValidCoordinate(centerX + i, centerY + 1)) this.setTileType(centerX + i, centerY + 1, TILE_TYPES.ROAD);
         }
-        this.setTileType(centerX, centerY, TILE_TYPES.ROAD); // Central road connecting R to C/I row
+        if (this.isValidCoordinate(centerX, centerY)) this.setTileType(centerX, centerY, TILE_TYPES.ROAD);
 
-        // Residential (3 tiles above the main road)
-        this.setTileType(centerX - 1, centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
-        this.setTileType(centerX,     centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
-        this.setTileType(centerX + 1, centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+        if (this.isValidCoordinate(centerX - 1, centerY - 2)) this.setTileType(centerX - 1, centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+        if (this.isValidCoordinate(centerX,     centerY - 2)) this.setTileType(centerX,     centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+        if (this.isValidCoordinate(centerX + 1, centerY - 2)) this.setTileType(centerX + 1, centerY - 2, TILE_TYPES.RESIDENTIAL_ZONE);
+        
+        if (this.isValidCoordinate(centerX - 2, centerY)) this.setTileType(centerX - 2, centerY, TILE_TYPES.COMMERCIAL_ZONE);
+        if (this.isValidCoordinate(centerX - 1, centerY)) this.setTileType(centerX - 1, centerY, TILE_TYPES.COMMERCIAL_ZONE);
 
-        // Commercial (3 tiles on the main C/I row)
-        this.setTileType(centerX - 2, centerY, TILE_TYPES.COMMERCIAL_ZONE);
-        this.setTileType(centerX - 1, centerY, TILE_TYPES.COMMERCIAL_ZONE);
-        // this.setTileType(centerX, centerY, TILE_TYPES.COMMERCIAL_ZONE); // This is a road
+        if (this.isValidCoordinate(centerX + 1, centerY)) this.setTileType(centerX + 1, centerY, TILE_TYPES.INDUSTRIAL_ZONE);
+        if (this.isValidCoordinate(centerX + 2, centerY)) this.setTileType(centerX + 2, centerY, TILE_TYPES.INDUSTRIAL_ZONE);
 
-        // Industrial (2 tiles on the main C/I row, further from R)
-        this.setTileType(centerX + 1, centerY, TILE_TYPES.INDUSTRIAL_ZONE);
-        this.setTileType(centerX + 2, centerY, TILE_TYPES.INDUSTRIAL_ZONE);
-
-        // Park (below the lower road, near residential conceptually)
-        this.setTileType(centerX -1, centerY + 2, TILE_TYPES.PARK);
-        this.setTileType(centerX,    centerY + 2, TILE_TYPES.PARK);
-        this.setTileType(centerX +1, centerY + 2, TILE_TYPES.PARK);
-
-        // Note: The simulation will need a few ticks for these zones to develop into L1 buildings.
-        // The road access flags and initial populations will be handled by the simulation controller.
+        if (this.isValidCoordinate(centerX -1, centerY + 2)) this.setTileType(centerX -1, centerY + 2, TILE_TYPES.PARK);
+        if (this.isValidCoordinate(centerX,    centerY + 2)) this.setTileType(centerX,    centerY + 2, TILE_TYPES.PARK);
+        if (this.isValidCoordinate(centerX +1, centerY + 2)) this.setTileType(centerX +1, centerY + 2, TILE_TYPES.PARK);
     }
 
 
@@ -99,9 +100,9 @@ export class GridController {
                 seedX = Math.floor(Math.random() * (C.GRID_SIZE_X - 8)) + 4;
                 seedY = Math.floor(Math.random() * (C.GRID_SIZE_Y - 8)) + 4;
                 attempts++;
-            } while (this.grid[seedY][seedX].type !== TILE_TYPES.GRASS && attempts < 10);
+            } while (this.grid[seedY]?.[seedX]?.type !== TILE_TYPES.GRASS && attempts < 10);
 
-            if (this.grid[seedY][seedX].type === TILE_TYPES.GRASS) {
+            if (this.grid[seedY]?.[seedX]?.type === TILE_TYPES.GRASS) {
                 const rangeSize = Math.floor(Math.random() * 15) + 10;
                 let currentMountains = 0;
                 const queue: { x: number; y: number }[] = [{x: seedX, y: seedY}];
@@ -115,7 +116,7 @@ export class GridController {
                     for (const n of neighbors) {
                         const nx = curr.x + n.dx;
                         const ny = curr.y + n.dy;
-                        if (nx >= 0 && nx < C.GRID_SIZE_X && ny >= 0 && ny < C.GRID_SIZE_Y && this.grid[ny][nx].type === TILE_TYPES.GRASS) {
+                        if (this.isValidCoordinate(nx, ny) && this.grid[ny][nx].type === TILE_TYPES.GRASS) {
                             if (Math.random() < 0.6) {
                                 this.setTileType(nx, ny, TILE_TYPES.MOUNTAIN);
                                 currentMountains++;
@@ -134,11 +135,11 @@ export class GridController {
         let currentY = 0;
         const riverLength = C.GRID_SIZE_Y + Math.floor(Math.random() * 5);
         for (let i = 0; i < riverLength; i++) {
-            if (currentY >= 0 && currentY < C.GRID_SIZE_Y && currentX >=0 && currentX < C.GRID_SIZE_X) {
+            if (this.isValidCoordinate(currentX, currentY)) {
                  if (this.grid[currentY][currentX].type !== TILE_TYPES.MOUNTAIN) {
                     this.setTileType(currentX, currentY, TILE_TYPES.WATER);
-                    if (Math.random() < 0.3 && currentX + 1 < C.GRID_SIZE_X && this.grid[currentY][currentX+1].type !== TILE_TYPES.MOUNTAIN) this.setTileType(currentX + 1, currentY, TILE_TYPES.WATER);
-                    if (Math.random() < 0.3 && currentX - 1 >= 0 && this.grid[currentY][currentX-1].type !== TILE_TYPES.MOUNTAIN) this.setTileType(currentX - 1, currentY, TILE_TYPES.WATER);
+                    if (Math.random() < 0.3 && this.isValidCoordinate(currentX + 1, currentY) && this.grid[currentY][currentX+1].type !== TILE_TYPES.MOUNTAIN) this.setTileType(currentX + 1, currentY, TILE_TYPES.WATER);
+                    if (Math.random() < 0.3 && this.isValidCoordinate(currentX - 1, currentY) && this.grid[currentY][currentX-1].type !== TILE_TYPES.MOUNTAIN) this.setTileType(currentX - 1, currentY, TILE_TYPES.WATER);
                  }
             }
             currentY++;
@@ -164,7 +165,7 @@ export class GridController {
 
         for (let y = checkStartY; y <= checkEndY; y++) {
             for (let x = checkStartX; x <= checkEndX; x++) {
-                if (this.grid[y] && this.grid[y][x] && this.grid[y][x].type === TILE_TYPES.WATER) {
+                if (this.grid[y]?.[x]?.type === TILE_TYPES.WATER) {
                     return true;
                 }
             }
@@ -192,7 +193,7 @@ export class GridController {
 
                     for (let y = seedY; y < seedY + clusterSizeY; y++) {
                         for (let x = seedX; x < seedX + clusterSizeX; x++) {
-                            if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
+                            if (this.isValidCoordinate(x,y) && this.grid[y][x].type === TILE_TYPES.GRASS) {
                                 this.setTileType(x, y, TILE_TYPES.NATURAL_PARK);
                             }
                         }
@@ -220,7 +221,7 @@ export class GridController {
                 if (foundClearSpot) {
                     for (let y = seedY; y < seedY + clusterSizeY; y++) {
                         for (let x = seedX; x < seedX + clusterSizeX; x++) {
-                            if (x < C.GRID_SIZE_X && y < C.GRID_SIZE_Y && this.grid[y][x].type === TILE_TYPES.GRASS) {
+                            if (this.isValidCoordinate(x,y) && this.grid[y][x].type === TILE_TYPES.GRASS) {
                                 this.setTileType(x, y, TILE_TYPES.NATURAL_PARK);
                             }
                         }
@@ -233,26 +234,24 @@ export class GridController {
     public isAreaClearForFeature(startX: number, startY: number, sizeX: number, sizeY: number, allowedTypes: string[] = [TILE_TYPES.GRASS.id]): boolean {
         for (let y = startY; y < startY + sizeY; y++) {
             for (let x = startX; x < startX + sizeX; x++) {
-                if (x < 0 || x >= C.GRID_SIZE_X || y < 0 || y >= C.GRID_SIZE_Y) return false;
-                if (!this.grid[y] || !this.grid[y][x] || !allowedTypes.includes(this.grid[y][x].type.id)) return false;
+                if (!this.isValidCoordinate(x,y) || !allowedTypes.includes(this.grid[y][x].type.id)) return false;
             }
         }
         return true;
     }
 
     public getTile(x: number, y: number): GridTile | undefined {
-        if (x >= 0 && x < C.GRID_SIZE_X && y >= 0 && y < C.GRID_SIZE_Y) {
+        if (this.isValidCoordinate(x, y)) {
             return this.grid[y][x];
         }
         return undefined;
     }
 
     public setTileType(x: number, y: number, tileType: TileType): void {
-        if (this.grid[y] && this.grid[y][x]) {
+        if (this.isValidCoordinate(x,y)) {
             const oldTileData = this.grid[y][x];
             this.grid[y][x] = {
                 ...this.createDefaultGridTile(tileType),
-                // Preserve pollution and tile value if it's not a totally new placement like grass
                 pollution: (tileType.id === TILE_TYPES.GRASS.id || tileType.isObstacle) ? 0 : oldTileData.pollution,
                 tileValue: (tileType.id === TILE_TYPES.GRASS.id || tileType.isObstacle) ? C.BASE_TILE_VALUE : oldTileData.tileValue,
             };
@@ -260,10 +259,8 @@ export class GridController {
             if (tileType.isDevelopableZone) {
                 this.grid[y][x].population = 0;
             }
-            // Initial population for L1 buildings being directly placed (e.g. by a scenario, not through simulation growth)
-            // This part is less critical now as `changeTileLevel` handles sim-driven L1 pop.
             else if (tileType.zoneCategory && tileType.level === 1 && tileType.populationCapacity) {
-                 this.grid[y][x].population = Math.floor(tileType.populationCapacity / 2); // Start with half capacity
+                 this.grid[y][x].population = Math.floor(tileType.populationCapacity / 2);
             }
         }
     }
@@ -273,16 +270,20 @@ export class GridController {
         if (tile) {
             const grassTileDefaults = this.createDefaultGridTile(TILE_TYPES.GRASS);
             tile.population = grassTileDefaults.population;
-            tile.tileValue = grassTileDefaults.tileValue; // Reset tile value for cleared land
-            tile.pollution = grassTileDefaults.pollution; // Reset pollution for cleared land
+            tile.tileValue = grassTileDefaults.tileValue;
+            tile.pollution = grassTileDefaults.pollution;
             tile.hasRoadAccess = grassTileDefaults.hasRoadAccess;
+            tile.isVisuallyStruggling = grassTileDefaults.isVisuallyStruggling;
+            tile.struggleTicks = grassTileDefaults.struggleTicks;
 
             if (tile.developmentTimerId) {
                 clearTimeout(tile.developmentTimerId);
                 delete tile.developmentTimerId;
             }
-            tile.isVisuallyStruggling = false;
-            tile.struggleTicks = 0;
         }
+    }
+
+    private isValidCoordinate(x: number, y: number): boolean {
+        return x >= 0 && x < C.GRID_SIZE_X && y >= 0 && y < C.GRID_SIZE_Y && this.grid[y] !== undefined;
     }
 }

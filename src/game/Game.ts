@@ -13,16 +13,27 @@ import { Renderer } from './Renderer';
 import { SimulationController } from './SimulationController';
 import { InputController } from './InputController';
 
+export interface GameDependencies {
+    mainInfoPanel?: MainInfoPanel;
+    buildToolbar?: BuildToolbar;
+    messageBox?: MessageBox;
+    tileInfoPane?: TileInfoPane;
+    pixiApplication?: PIXI.Application;
+    renderer?: Renderer;
+    inputController?: InputController;
+    gridController?: GridController;
+    simulationController?: SimulationController;
+}
+
 export class Game {
     public app: PIXI.Application;
-    private canvasElement: HTMLCanvasElement; 
+    private canvasElement: HTMLCanvasElement | {}; 
     
-    // Game State
     public currentMode: GameMode = 'pan';
     public currentViewMode: ViewMode = 'default';
     public currentBuildType: TileType | null = null; 
 
-    public playerBudget: number = C.INITIAL_BUDGET;
+    public playerBudget: number;
     public cameraOffsetX: number = 0;
     public cameraOffsetY: number = 0;
     public isDragging: boolean = false; 
@@ -31,7 +42,7 @@ export class Game {
     public lastTouchX: number | null = null;
     public lastTouchY: number | null = null;
     public hoveredTile: Coordinates | null = null; 
-    private gameTickIntervalId: number | null = null;
+    private gameTickIntervalId: NodeJS.Timeout | number | null = null; // Consistent type for interval ID
     public gameDay: number = 0;
     
     public totalPopulation: number = 0;
@@ -45,79 +56,101 @@ export class Game {
     public messageBox: MessageBox;
     public tileInfoPane: TileInfoPane;
 
-    private gridController: GridController;
+    public gridController: GridController;
     private renderer: Renderer;
     public simulationController: SimulationController; 
     private inputController: InputController;
 
-    // FPS Counter
     private fpsDisplayElement: HTMLElement | null = null;
     private showFps: boolean = false;
     private lastFpsUpdateTime: number = 0;
     private frameCount: number = 0;
 
+    private isHeadless: boolean;
 
-    constructor() {
-        this.mainInfoPanel = new MainInfoPanel();
-        this.buildToolbar = new BuildToolbar();
-        this.messageBox = new MessageBox();
-        this.tileInfoPane = new TileInfoPane();
-        this.gridController = new GridController();
 
-        this.app = new PIXI.Application({
-            width: window.innerWidth,
-            height: window.innerHeight,
-            backgroundColor: 0x72a372, 
-            antialias: true, 
-        });
+    constructor(dependencies: Partial<GameDependencies> = {}, initialBudget: number = C.INITIAL_BUDGET) {
+        this.isHeadless = typeof window === 'undefined' || (dependencies.pixiApplication && !(dependencies.pixiApplication instanceof PIXI.Application));
+        this.playerBudget = initialBudget;
 
-        this.canvasElement = this.app.view as HTMLCanvasElement; 
-        
-        const canvasContainer = document.getElementById('pixi-canvas-container');
-        if (!canvasContainer) {
-            throw new Error("pixi-canvas-container not found!");
+        this.gridController = dependencies.gridController || new GridController(this.isHeadless);
+
+        if (!this.isHeadless && typeof window !== 'undefined') {
+            this.mainInfoPanel = dependencies.mainInfoPanel || new MainInfoPanel();
+            this.buildToolbar = dependencies.buildToolbar || new BuildToolbar();
+            this.messageBox = dependencies.messageBox || new MessageBox();
+            this.tileInfoPane = dependencies.tileInfoPane || new TileInfoPane();
+            
+            this.app = dependencies.pixiApplication || new PIXI.Application({
+                width: window.innerWidth,
+                height: window.innerHeight,
+                backgroundColor: 0x72a372, 
+                antialias: true, 
+            });
+            this.canvasElement = this.app.view as HTMLCanvasElement; 
+            const canvasContainer = document.getElementById('pixi-canvas-container');
+            if (canvasContainer) {
+                (this.canvasElement as HTMLCanvasElement).style.width = '100%';
+                (this.canvasElement as HTMLCanvasElement).style.height = '100%';
+                canvasContainer.appendChild(this.canvasElement as HTMLCanvasElement);
+            } else if (!dependencies.pixiApplication && document.getElementById('pixi-canvas-container')) { 
+                throw new Error("pixi-canvas-container not found!");
+            }
+
+            this.renderer = dependencies.renderer || new Renderer(this.app, () => this); 
+            this.inputController = dependencies.inputController || new InputController(this.canvasElement as HTMLCanvasElement, this);
+
+            const urlParams = new URLSearchParams(window.location.search);
+            this.showFps = urlParams.get('fps') === 'true';
+        } else {
+            this.mainInfoPanel = dependencies.mainInfoPanel || ({ updateDisplay: jest.fn() } as any);
+            this.buildToolbar = dependencies.buildToolbar || ({ setupEventListeners: jest.fn(), updateSelectedButtonVisuals: jest.fn(), updateViewModeButtonText: jest.fn() } as any);
+            this.messageBox = dependencies.messageBox || ({ show: jest.fn() } as any);
+            this.tileInfoPane = dependencies.tileInfoPane || ({ update: jest.fn(), show: jest.fn(), hide: jest.fn() } as any);
+            
+            this.app = dependencies.pixiApplication || ({ 
+                stage: { addChild: jest.fn(), removeChildren: jest.fn() }, 
+                ticker: { add: jest.fn(), remove: jest.fn() }, 
+                renderer: { resize: jest.fn(), view: {} },
+                view: {}
+            } as any);
+            this.canvasElement = this.app.view || {};
+            this.renderer = dependencies.renderer || ({ render: jest.fn() } as any);
+            this.inputController = dependencies.inputController || ({} as any); 
         }
-        this.canvasElement.style.width = '100%';
-        this.canvasElement.style.height = '100%';
-        canvasContainer.appendChild(this.canvasElement);
-
-        this.renderer = new Renderer(this.app, () => this); 
-        this.simulationController = new SimulationController(this.gridController, this);
-        this.inputController = new InputController(this.canvasElement, this);
-
-        // Check for FPS parameter
-        const urlParams = new URLSearchParams(window.location.search);
-        this.showFps = urlParams.get('fps') === 'true';
+        
+        this.simulationController = dependencies.simulationController || new SimulationController(this.gridController, this);
     }
 
     public initializeGame(): void {
-        this.setupComponentInteractions();
-        
-        if (this.showFps) {
-            this.setupFpsCounter();
+        if (!this.isHeadless && typeof window !== 'undefined') {
+            this.setupComponentInteractions();
+            if (this.showFps) {
+                this.setupFpsCounter();
+            }
+            this.setCanvasSize(); 
+            window.addEventListener('resize', () => this.handleResize());
         }
-
+        
         const initialFinance = this.simulationController.processGameTick(); 
         this.updateAllUI(initialFinance.taxes, initialFinance.costs, initialFinance.net); 
-        this.setCanvasSize(); 
         
         this.currentMode = 'pan'; 
         this.currentBuildType = null; 
-        this.messageBox.show('Pan mode active. Select a tool or pan the map.', 1500);
+        if (!this.isHeadless) {
+            this.messageBox.show('Pan mode active. Select a tool or pan the map.', 1500);
+            this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
+            this.setCanvasCursor();
+        }
 
         this.startGameLoop();
-        this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
-        this.setCanvasCursor();
-        
-        window.addEventListener('resize', () => this.handleResize());
-        
         this.drawGame(); 
     }
 
     private setupFpsCounter(): void {
+        if (this.isHeadless || typeof document === 'undefined') return;
         this.fpsDisplayElement = document.createElement('div');
         this.fpsDisplayElement.id = 'fpsDisplay';
-        // Basic styling, can be enhanced with CSS
         this.fpsDisplayElement.textContent = 'FPS: -';
         document.body.appendChild(this.fpsDisplayElement);
 
@@ -125,11 +158,10 @@ export class Game {
         this.frameCount = 0;
 
         this.app.ticker.add(() => {
-            if (!this.fpsDisplayElement) return;
-
+            if (!this.fpsDisplayElement || typeof performance === 'undefined') return;
             this.frameCount++;
             const currentTime = performance.now();
-            if (currentTime >= this.lastFpsUpdateTime + 1000) { // Update every second
+            if (currentTime >= this.lastFpsUpdateTime + 1000) {
                 const fps = Math.round((this.frameCount * 1000) / (currentTime - this.lastFpsUpdateTime));
                 this.fpsDisplayElement.textContent = `FPS: ${fps}`;
                 this.lastFpsUpdateTime = currentTime;
@@ -139,11 +171,13 @@ export class Game {
     }
 
     private handleResize(): void {
+        if (this.isHeadless) return;
         this.setCanvasSize();
         this.drawGame(); 
     }
 
     private setupComponentInteractions(): void {
+        if (this.isHeadless) return;
         this.buildToolbar.setupEventListeners(
             (toolAction, tileType) => this.handleToolSelection(toolAction, tileType), 
             (newMode) => this.setViewMode(newMode) 
@@ -170,8 +204,10 @@ export class Game {
             this.messageBox.show(`Selected to build: ${this.currentBuildType.name} ($${this.currentBuildType.cost})`, 1500);
         }
 
-        this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
-        this.setCanvasCursor();
+        if(!this.isHeadless) {
+            this.buildToolbar.updateSelectedButtonVisuals(this.currentMode, this.currentBuildType);
+            this.setCanvasCursor();
+        }
 
         const newBuildPreviewActive = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
         if (oldBuildPreviewActive !== newBuildPreviewActive) {
@@ -188,14 +224,16 @@ export class Game {
     public setViewMode(newMode: ViewMode): void {
         const oldViewMode = this.currentViewMode;
         this.currentViewMode = newMode;
-        this.buildToolbar.updateViewModeButtonText(this.currentViewMode); 
+        
+        if(!this.isHeadless) {
+            this.buildToolbar.updateViewModeButtonText(this.currentViewMode); 
+        }
 
         let modeName = "Default";
         if (newMode === 'tile_value_heatmap') modeName = "Tile Value Heatmap";
         else if (newMode === 'pollution_heatmap') modeName = "Pollution Heatmap";
         this.messageBox.show(`${modeName} view active.`, 2000);
         
-        // Always update hover display, as pane visibility might change based on this call
         this.updateHoveredTileDisplay(this.hoveredTile); 
         if (oldViewMode !== newMode) {
             this.drawGame();
@@ -204,18 +242,19 @@ export class Game {
 
 
     public setCanvasCursor(): void {
-        if (this.canvasElement) {
-            this.canvasElement.classList.remove('pan-mode-active', 'pan-mode-dragging'); 
-            if (this.currentMode === 'pan') {
-                this.canvasElement.classList.add('pan-mode-active');
-                this.canvasElement.style.cursor = this.isDragging ? 'grabbing' : 'grab';
-            } else { 
-                 this.canvasElement.style.cursor = 'default'; 
-            }
+        if (this.isHeadless || !(this.canvasElement instanceof HTMLCanvasElement)) return;
+        
+        this.canvasElement.classList.remove('pan-mode-active', 'pan-mode-dragging'); 
+        if (this.currentMode === 'pan') {
+            this.canvasElement.classList.add('pan-mode-active');
+            this.canvasElement.style.cursor = this.isDragging ? 'grabbing' : 'grab';
+        } else { 
+             this.canvasElement.style.cursor = 'default'; 
         }
     }
 
     public setCanvasSize(): void {
+        if (this.isHeadless || !this.app || !this.app.renderer || typeof window === 'undefined') return;
         this.app.renderer.resize(window.innerWidth, window.innerHeight);
         
         const gridPixelHeight = (C.GRID_SIZE_X + C.GRID_SIZE_Y) * C.TILE_HALF_HEIGHT_ISO;
@@ -226,8 +265,7 @@ export class Game {
     }
 
     public drawGame(): void {
-        // The actual drawing is handled by Pixi's ticker automatically.
-        // This method updates the state of the Pixi objects for the renderer.
+        if (this.isHeadless || !this.renderer || typeof this.renderer.render !== 'function') return;
         this.renderer.render(
             this.gridController.grid,
             this.cameraOffsetX, this.cameraOffsetY,
@@ -238,6 +276,7 @@ export class Game {
     }
     
     public updateAllUI(taxes: number = 0, costs: number = 0, net: number = 0): void {
+        if (this.isHeadless || typeof this.mainInfoPanel.updateDisplay !== 'function') return;
         this.mainInfoPanel.updateDisplay(
             this.gameDay, this.playerBudget, this.totalPopulation,
             this.employmentRate, this.citySatisfaction,
@@ -258,19 +297,18 @@ export class Game {
         }
         this.hoveredTile = coords;
 
-        // Show tile info pane if hovering over a valid tile, regardless of view mode
-        if (coords) {
-            const tileData = this.gridController.getTile(coords.x, coords.y);
-            if (tileData) {
-                this.tileInfoPane.update(tileData, coords);
-                this.tileInfoPane.show();
+        if (!this.isHeadless && typeof this.tileInfoPane.update === 'function') {
+            if (coords) {
+                const tileData = this.gridController.getTile(coords.x, coords.y);
+                if (tileData) {
+                    this.tileInfoPane.update(tileData, coords);
+                    this.tileInfoPane.show();
+                } else {
+                    this.tileInfoPane.hide();
+                }
             } else {
-                // This case (coords exist but no tileData) should be rare for valid grid coordinates
                 this.tileInfoPane.hide();
             }
-        } else {
-            // Not hovering over any tile
-            this.tileInfoPane.hide();
         }
         
         if (needsCanvasRedrawForBuildPreview) { 
@@ -355,24 +393,30 @@ export class Game {
             }
         }
         
-        if (tileData.type.id === selectedTool.id && selectedTool.id !== TILE_TYPES.GRASS.id) {
-            // this.messageBox.show(`This is already a ${tileData.type.name}.`, 1500); 
-        }
         return false;
     }
 
     private startGameLoop(): void {
-        if (this.gameTickIntervalId) clearInterval(this.gameTickIntervalId);
-        // Game simulation tick
-        this.gameTickIntervalId = window.setInterval(() => this.gameTick(), C.GAME_TICK_INTERVAL);
-        console.log("Game simulation loop started.");
+        if (this.gameTickIntervalId) {
+            clearInterval(this.gameTickIntervalId as any); // Cast to any if types conflict
+        }
+        const interval = (this.isHeadless || typeof window === 'undefined') ? C.TEST_GAME_TICK_INTERVAL : C.GAME_TICK_INTERVAL;
+        
+        // Use globalThis for universal access to setInterval/clearInterval
+        this.gameTickIntervalId = globalThis.setInterval(() => this.gameTick(), interval);
+    }
+    
+    public stopGameLoop(): void { 
+        if (this.gameTickIntervalId) {
+            globalThis.clearInterval(this.gameTickIntervalId as any); // Cast to any
+            this.gameTickIntervalId = null;
+        }
     }
 
     private gameTick(): void {
         this.gameDay++;
         const economyUpdate = this.simulationController.processGameTick();
         this.updateAllUI(economyUpdate.taxes, economyUpdate.costs, economyUpdate.net); 
-        // Request the renderer to update the state of Pixi objects for the next render frame
         this.drawGame(); 
     }
 }

@@ -124,6 +124,7 @@ export const TILE_HEIGHT_ISO = TILE_WIDTH_ISO / 2;
 export const TILE_HALF_WIDTH_ISO = TILE_WIDTH_ISO / 2;
 export const TILE_HALF_HEIGHT_ISO = TILE_HEIGHT_ISO / 2;
 export const TILE_DEPTH_UNIT = TILE_HEIGHT_ISO * 0.75;
-export const GAME_TICK_INTERVAL = 2000;
+export const GAME_TICK_INTERVAL = 2000; // For simulation logic
+export const TEST_GAME_TICK_INTERVAL = 10; // For faster tests if intervals matter
 
 export const INITIAL_BUDGET = 3000;
