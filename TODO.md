@@ -1,7 +1,3 @@
-- city hall should be randomly placed
-- do not place initial road by city hall, it has a carry cost so we start losing money straight away
-- do not show preview of a tile if we are hovering over a mountain
-
 - the overlay (tile value, polution) need to render correctly when showing over a hilly terrain. The "wall" facing me is notpainted with the overlay color.
 - zone tiles need to show the same wall caolor even for the "block" that's under ground. E.g. when a business is strugglign and we give it a darker shade, I need to see this darker shade underground as well.
 - efficiency show in blue in the info pane unlike the other fields

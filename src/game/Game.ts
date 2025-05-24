@@ -1,4 +1,3 @@
-// src/game/Game.ts
 import * as PIXI from 'pixi.js';
 import { TILE_TYPES } from '../config/tileTypes';
 import * as C from '../config/constants';
@@ -289,10 +288,36 @@ export class Game {
 
     public drawGame(): void {
         if (this.isHeadless || !this.renderer || typeof this.renderer.render !== 'function') return;
+
+        let finalHoveredTileForPreview: Coordinates | null = null;
+        if (this.currentMode === 'build' && this.currentViewMode === 'default' && this.currentBuildType && this.hoveredTile) {
+            const tileDataUnderMouse = this.gridController.getTile(this.hoveredTile.x, this.hoveredTile.y);
+            if (tileDataUnderMouse) {
+                let canShowPreview = true;
+
+                if (tileDataUnderMouse.type.isObstacle) { // e.g., Mountain
+                    canShowPreview = false;
+                }
+                if (tileDataUnderMouse.type.id === TILE_TYPES.CITY_HALL.id) {
+                    canShowPreview = false;
+                }
+                // If trying to build something other than water or grass on a water tile, don't preview.
+                if (tileDataUnderMouse.type.id === TILE_TYPES.WATER.id &&
+                    this.currentBuildType.id !== TILE_TYPES.WATER.id &&
+                    this.currentBuildType.id !== TILE_TYPES.GRASS.id) {
+                    canShowPreview = false;
+                }
+
+                if (canShowPreview) {
+                    finalHoveredTileForPreview = this.hoveredTile;
+                }
+            }
+        }
+        
         this.renderer.render(
             this.gridController.grid,
             this.cameraOffsetX, this.cameraOffsetY,
-            (this.currentMode === 'build' && this.currentViewMode === 'default' && this.currentBuildType) ? this.hoveredTile : null,
+            finalHoveredTileForPreview,
             this.currentBuildType,
             this.currentViewMode,
             this.hoveredTile 
@@ -312,12 +337,44 @@ export class Game {
         let needsCanvasRedraw = false;
         const oldHoveredTile = this.hoveredTile;
         
-        const shouldShowBuildPreviewNow = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType;
-        const wasShowingBuildPreview = this.currentMode === 'build' && this.currentViewMode === 'default' && !!this.currentBuildType && !!oldHoveredTile;
+        // Determine if preview state *might* change based on current settings and new hover coords
+        const currentBuildTypeExists = !!this.currentBuildType;
+        const inCorrectModeForPreview = this.currentMode === 'build' && this.currentViewMode === 'default' && currentBuildTypeExists;
 
-        if (shouldShowBuildPreviewNow !== wasShowingBuildPreview || (shouldShowBuildPreviewNow && (oldHoveredTile?.x !== coords?.x || oldHoveredTile?.y !== coords?.y))) {
+        let oldTileCanShowPreview = false;
+        if (inCorrectModeForPreview && oldHoveredTile) {
+            const oldTileData = this.gridController.getTile(oldHoveredTile.x, oldHoveredTile.y);
+            if (oldTileData && !oldTileData.type.isObstacle && oldTileData.type.id !== TILE_TYPES.CITY_HALL.id) {
+                if (oldTileData.type.id === TILE_TYPES.WATER.id) {
+                    if (this.currentBuildType!.id === TILE_TYPES.WATER.id || this.currentBuildType!.id === TILE_TYPES.GRASS.id) {
+                        oldTileCanShowPreview = true;
+                    }
+                } else {
+                    oldTileCanShowPreview = true;
+                }
+            }
+        }
+        
+        let newTileCanShowPreview = false;
+        if (inCorrectModeForPreview && coords) {
+            const newTileData = this.gridController.getTile(coords.x, coords.y);
+            if (newTileData && !newTileData.type.isObstacle && newTileData.type.id !== TILE_TYPES.CITY_HALL.id) {
+                 if (newTileData.type.id === TILE_TYPES.WATER.id) {
+                    if (this.currentBuildType!.id === TILE_TYPES.WATER.id || this.currentBuildType!.id === TILE_TYPES.GRASS.id) {
+                        newTileCanShowPreview = true;
+                    }
+                } else {
+                    newTileCanShowPreview = true;
+                }
+            }
+        }
+
+        // If the possibility of showing a preview has changed, or the tile for preview changed
+        if (oldTileCanShowPreview !== newTileCanShowPreview || 
+            (newTileCanShowPreview && (oldHoveredTile?.x !== coords?.x || oldHoveredTile?.y !== coords?.y))) {
             needsCanvasRedraw = true;
         }
+
 
         const shouldShowInfoAvatarNow = !!coords && this.currentViewMode === 'default';
         const wasShowingInfoAvatar = !!oldHoveredTile && this.currentViewMode === 'default'; 
